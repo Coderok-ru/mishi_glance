@@ -13,6 +13,7 @@
 [![Universal](https://img.shields.io/badge/Universal-arm64%20%2B%20x86__64-blue)]()
 [![Size](https://img.shields.io/badge/размер-3%20МБ-green)]()
 [![Notarized](https://img.shields.io/badge/Apple-нотаризовано-success?logo=apple)]()
+[![License](https://img.shields.io/badge/лицензия-MIT-a656ff)](LICENSE)
 
 [**⬇︎ Скачать Mishi Glance 1.1.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg)
 
@@ -242,6 +243,21 @@ natural sort против системного компаратора Finder, н
 
 ---
 
+## Лицензия
+
+Исходный код распространяется по [MIT](LICENSE) — берите, меняйте, встраивайте
+в свои проекты, в том числе коммерческие. Единственное условие: сохраните текст
+лицензии с указанием авторства.
+
+Лицензия покрывает **код**. Отдельно:
+
+- **иконка приложения** — художественная работа, права на неё не передаются вместе с кодом;
+- **шрифты** Poppins и Montserrat в `scripts/assets/` — SIL Open Font License 1.1,
+  подробности в [FONTS.md](scripts/assets/FONTS.md). Нужны только для отрисовки
+  фона установщика, в приложение не входят.
+
+---
+
 ## Об авторе
 
 <table>
@@ -272,5 +288,5 @@ natural sort против системного компаратора Finder, н
 ---
 
 <div align="center">
-<sub>© 2026 Coderok · Андрей Любиченко</sub>
+<sub>© 2026 Coderok · Андрей Любиченко · <a href="LICENSE">MIT</a></sub>
 </div>
