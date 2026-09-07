@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeUpdatePresentation()
         UpdateController.shared.checkOnLaunch()
-        if !AppSettings.didShowWelcome { showWelcome() }
+        if shouldShowWelcome { showWelcome() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -328,6 +328,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.activate(ignoringOtherApps: true)
         shortcutsWindow = window
     }
+
+    /// Знакомство при запуске показываем, только пока пользователь его
+    /// не прошёл. Из меню «Справка» оно открывается всегда.
+    var shouldShowWelcome: Bool { !AppSettings.didShowWelcome }
 
     /// Приветствие показывается ровно один раз — при самом первом запуске.
     func showWelcome() {

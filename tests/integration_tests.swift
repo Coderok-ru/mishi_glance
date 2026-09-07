@@ -481,8 +481,58 @@ for keys in [["←", "→"], ["F"], ["⌘", "I"], ["P"], ["X"], ["⌘", "B"], ["
     check("описано сочетание \(keys.joined(separator: "+"))",
           allItems.contains { $0.keys == keys })
 }
-check("первый запуск ещё не отмечен или отмечен — флаг читается",
-      AppSettings.didShowWelcome == true || AppSettings.didShowWelcome == false)
+// Знакомство: показывается один раз, но из меню доступно всегда.
+let savedFlag = AppSettings.didShowWelcome
+AppSettings.didShowWelcome = false
+check("на первом запуске знакомство показывается", menuDelegate.shouldShowWelcome)
+menuDelegate.showWelcome()
+check("после показа флаг выставлен", AppSettings.didShowWelcome)
+check("на следующем запуске уже не показывается", !menuDelegate.shouldShowWelcome)
+menuDelegate.showWelcome()
+check("повторный вызов из меню работает", AppSettings.didShowWelcome)
+check("пункт меню «Знакомство» доступен", menuDelegate.validateMenuItem(
+        NSMenuItem(title: "", action: #selector(AppDelegate.showWelcomeAgain(_:)),
+                   keyEquivalent: "")))
+check("пункт «Клавиши…» доступен", menuDelegate.validateMenuItem(
+        NSMenuItem(title: "", action: #selector(AppDelegate.showShortcuts(_:)),
+                   keyEquivalent: "")))
+AppSettings.didShowWelcome = savedFlag
+
+print("\n[U] Разбор заметок к релизу")
+let notes = """
+    Первая строка описания.
+
+    ## Установка
+
+    Скачайте `файл.dmg` и перетащите в «Программы».
+
+    > Заверено у Apple.
+
+    ---
+
+    ## Что нового
+    - **Отбраковка** кадров
+    - Сравнение двух снимков
+    1. Нумерованный пункт
+    """
+let blocks = MarkdownBlock.parse(notes)
+check("заголовки распознаны",
+      blocks.filter { if case .heading = $0 { return true }; return false }.count == 2,
+      "\(blocks.count) блоков")
+check("уровень заголовка прочитан",
+      blocks.contains(.heading(level: 2, text: "Установка")))
+check("маркированные пункты", blocks.contains(.bullet("**Отбраковка** кадров")))
+check("нумерованные пункты", blocks.contains(.bullet("Нумерованный пункт")))
+check("цитата", blocks.contains(.quote("Заверено у Apple.")))
+check("горизонтальная черта", blocks.contains(.rule))
+check("абзац собран целиком", blocks.contains(.paragraph("Первая строка описания.")))
+check("знаки разметки не попали в текст",
+      !blocks.contains { if case .paragraph(let t) = $0 { return t.hasPrefix("#") }; return false })
+// Строчная разметка снимается уже при отрисовке.
+let inline = AttributedString.inlineMarkdown("**жирный** и `код`")
+check("строчная разметка разобрана", !String(inline.characters).contains("**"),
+      String(inline.characters))
+check("пустой текст не ломает разбор", MarkdownBlock.parse("").isEmpty)
 
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)

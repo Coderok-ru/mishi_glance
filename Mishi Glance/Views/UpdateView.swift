@@ -31,13 +31,10 @@ struct UpdateView: View {
             if case .available(let release) = controller.state, !release.notes.isEmpty {
                 Divider()
                 ScrollView {
-                    Text(release.notes)
-                        .font(.system(size: 11))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ReleaseNotesView(markdown: release.notes)
                         .padding(14)
                 }
-                .frame(height: 200)
+                .frame(height: 230)
             }
 
             if case .downloading(let fraction) = controller.state {
@@ -123,5 +120,48 @@ struct UpdateView: View {
             ?? NSImage(contentsOf: Bundle.main.bundleURL
                 .appendingPathComponent("Contents/Resources/AppIcon.icns"))
             ?? NSApp.applicationIconImage
+    }
+}
+
+
+/// Заметки к релизу: разбираем Markdown на блоки и рисуем их,
+/// иначе в окне видны сами знаки разметки.
+struct ReleaseNotesView: View {
+    let markdown: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array(MarkdownBlock.parse(markdown).enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .heading(let level, let text):
+                    Text(AttributedString.inlineMarkdown(text))
+                        .font(.system(size: level <= 2 ? 13 : 12, weight: .semibold))
+                        .padding(.top, 4)
+                case .paragraph(let text):
+                    Text(AttributedString.inlineMarkdown(text))
+                        .font(.system(size: 11))
+                        .fixedSize(horizontal: false, vertical: true)
+                case .bullet(let text):
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("•").font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(AttributedString.inlineMarkdown(text))
+                            .font(.system(size: 11))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case .quote(let text):
+                    HStack(alignment: .top, spacing: 8) {
+                        Rectangle().fill(Color.accentColor.opacity(0.6)).frame(width: 2)
+                        Text(AttributedString.inlineMarkdown(text))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case .rule:
+                    Divider().padding(.vertical, 2)
+                }
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

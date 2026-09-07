@@ -15,7 +15,7 @@
 [![Notarized](https://img.shields.io/badge/Apple-нотаризовано-success?logo=apple)]()
 [![License](https://img.shields.io/badge/лицензия-MIT-a656ff)](LICENSE)
 
-[**⬇︎ Скачать Mishi Glance 1.4.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.4.0.dmg)
+[**⬇︎ Скачать Mishi Glance 1.4.1**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.4.1.dmg)
 
 </div>
 
