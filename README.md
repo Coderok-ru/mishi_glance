@@ -11,7 +11,9 @@
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.10-orange?logo=swift)](https://swift.org)
 [![Universal](https://img.shields.io/badge/Universal-arm64%20%2B%20x86__64-blue)]()
-[![Size](https://img.shields.io/badge/размер-4%20МБ-green)]()
+[![Size](https://img.shields.io/badge/размер-3%20МБ-green)]()
+
+[**⬇︎ Скачать Mishi Glance 1.0.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.0.0.dmg)
 
 </div>
 
@@ -123,7 +125,7 @@ Mishi Glance закрывает этот пробел. Открыли одно �
 |---|---|
 | Открытие файла до первого кадра | ~30 мс (JPEG 12 Мп, M-серия) |
 | Переход к соседнему кадру | из кеша, мгновенно |
-| Размер приложения | 4 МБ |
+| Размер приложения | 3 МБ |
 | Кеш по умолчанию | 300 МБ, настраивается 64–8192 МБ |
 
 Список папки читается асинхронно — папка на тысячи файлов не блокирует интерфейс.
@@ -132,7 +134,7 @@ Mishi Glance закрывает этот пробел. Открыли одно �
 
 ## Установка
 
-Скачайте `Mishi Glance.dmg`, откройте и перетащите приложение в «Программы».
+Скачайте [последний релиз](https://github.com/Coderok-ru/mishi_glance/releases/latest), откройте образ и перетащите приложение в «Программы».
 
 <div align="center">
 <img src="docs/dmg-installer.png" width="640" alt="Установщик">
