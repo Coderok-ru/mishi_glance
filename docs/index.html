@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mishi Glance — просмотрщик изображений для Mac</title>
+<meta name="description" content="Открыли одно фото — смотрите всю папку. Лёгкий просмотрщик изображений для macOS: листание стрелками, масштаб, полный экран.">
+<link rel="icon" href="icon.png">
+
+<meta property="og:title" content="Mishi Glance — просмотрщик изображений для Mac">
+<meta property="og:description" content="Открыли одно фото — смотрите всю папку. Стрелками.">
+<meta property="og:image" content="https://coderok-ru.github.io/mishi_glance/viewer.png">
+<meta property="og:type" content="website">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --surface:#212428;
+    --deep:#16181c;
+    --panel:#1e2024;
+    --accent:#a656ff;
+    --accent-soft:rgba(166,86,255,.18);
+    --heading:#ffffff;
+    --body:#98a0ad;
+    --muted:#6b737f;
+    --line:rgba(255,255,255,.08);
+    --display:"Poppins","Montserrat",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --text:"Montserrat",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--surface);
+    color:var(--body);
+    font-family:var(--text);
+    font-size:17px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  h1,h2,h3{color:var(--heading);font-family:var(--display);line-height:1.15;letter-spacing:-.02em}
+  a{color:var(--accent);text-decoration:none}
+  img{max-width:100%;display:block}
+  .wrap{width:min(1120px,92vw);margin:0 auto}
+
+  /* ---------- шапка ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(33,36,40,.82);
+    backdrop-filter:saturate(180%) blur(18px);
+    border-bottom:1px solid var(--line);
+  }
+  .bar{display:flex;align-items:center;gap:12px;padding:14px 0}
+  .bar img{width:30px;height:30px;border-radius:7px}
+  .bar b{font-family:var(--display);color:var(--heading);font-size:16px;font-weight:600}
+  .bar nav{margin-left:auto;display:flex;gap:26px;align-items:center}
+  .bar nav a{color:var(--body);font-size:14px;font-weight:500;transition:color .2s}
+  .bar nav a:hover{color:var(--heading)}
+  .bar .mini{
+    background:var(--accent);color:#fff;padding:8px 16px;border-radius:999px;
+    font-size:14px;font-weight:600;transition:transform .18s,box-shadow .18s;
+  }
+  .bar .mini:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(166,86,255,.35)}
+  @media(max-width:720px){.bar nav a:not(.mini){display:none}}
+
+  /* ---------- герой ---------- */
+  .hero{position:relative;text-align:center;padding:96px 0 0;overflow:hidden}
+  .hero::before{
+    content:"";position:absolute;top:-280px;left:50%;transform:translateX(-50%);
+    width:900px;height:900px;border-radius:50%;
+    background:radial-gradient(circle,var(--accent-soft) 0%,transparent 62%);
+    pointer-events:none;
+  }
+  .hero > *{position:relative}
+  .hero .icon{
+    width:120px;height:120px;margin:0 auto 26px;border-radius:27px;
+    box-shadow:0 22px 60px rgba(0,0,0,.55);
+  }
+  .hero h1{font-size:clamp(38px,6.4vw,68px);font-weight:700;margin-bottom:20px}
+  .hero h1 span{
+    background:linear-gradient(120deg,var(--accent),#d8b4ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .hero p.lead{
+    font-size:clamp(17px,2.1vw,21px);max-width:620px;margin:0 auto 36px;color:var(--body);
+  }
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;align-items:center}
+  .btn{
+    display:inline-flex;align-items:center;gap:10px;
+    background:var(--accent);color:#fff;font-weight:600;font-size:17px;
+    padding:15px 30px;border-radius:999px;
+    transition:transform .18s,box-shadow .18s;
+    box-shadow:0 10px 30px rgba(166,86,255,.32);
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(166,86,255,.45)}
+  .btn.ghost{background:transparent;color:var(--body);box-shadow:none;border:1px solid var(--line)}
+  .btn.ghost:hover{color:var(--heading);border-color:rgba(255,255,255,.24);box-shadow:none}
+  .meta{margin-top:18px;font-size:14px;color:var(--muted)}
+  .meta b{color:var(--body);font-weight:500}
+
+  .shot-hero{
+    margin:60px auto 0;width:min(980px,94vw);
+    border-radius:16px;overflow:hidden;
+    border:1px solid var(--line);
+    box-shadow:0 40px 100px rgba(0,0,0,.6);
+  }
+
+  /* ---------- секции ---------- */
+  section{padding:104px 0}
+  .band{background:var(--deep)}
+  .eyebrow{
+    color:var(--accent);font-size:13px;font-weight:700;
+    letter-spacing:.13em;text-transform:uppercase;margin-bottom:14px;
+  }
+  h2{font-size:clamp(28px,4vw,42px);font-weight:700;margin-bottom:18px}
+  .sub{font-size:18px;max-width:640px}
+  .center{text-align:center}
+  .center .sub{margin-left:auto;margin-right:auto}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+  .split.flip .copy{order:2}
+  @media(max-width:880px){
+    .split{grid-template-columns:1fr;gap:38px}
+    .split.flip .copy{order:0}
+  }
+  .frame{
+    border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    box-shadow:0 26px 64px rgba(0,0,0,.5);
+  }
+  .frame.tall{max-width:340px;margin:0 auto}
+
+  /* ---------- проблема → решение ---------- */
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:44px}
+  @media(max-width:760px){.compare{grid-template-columns:1fr}}
+  .card{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:30px 28px;
+  }
+  .card .mark{font-size:26px;margin-bottom:12px;display:block}
+  .card h3{font-size:19px;margin-bottom:8px;font-weight:600}
+  .card.good{border-color:rgba(166,86,255,.34)}
+  .card.good h3{color:var(--accent)}
+
+  /* ---------- возможности ---------- */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:52px}
+  @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  .tile{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:28px 26px;transition:border-color .22s,transform .22s;
+  }
+  .tile:hover{border-color:rgba(166,86,255,.34);transform:translateY(-3px)}
+  .tile .ico{
+    width:42px;height:42px;border-radius:11px;display:grid;place-items:center;
+    background:var(--accent-soft);margin-bottom:16px;font-size:20px;
+  }
+  .tile h3{font-size:17px;margin-bottom:7px;font-weight:600}
+  .tile p{font-size:15px;line-height:1.6}
+
+  /* ---------- клавиши ---------- */
+  .keys{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:40px}
+  .key{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:12px 18px;font-size:15px;color:var(--body);
+  }
+  .key b{
+    color:var(--heading);font-family:var(--display);font-weight:600;
+    display:inline-block;min-width:26px;text-align:center;
+  }
+
+  /* ---------- финальный призыв ---------- */
+  .final{text-align:center;position:relative;overflow:hidden}
+  .final::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse at 50% 120%,var(--accent-soft) 0%,transparent 60%);
+    pointer-events:none;
+  }
+  .final > *{position:relative}
+
+  /* ---------- подвал ---------- */
+  footer{border-top:1px solid var(--line);padding:56px 0 40px;background:var(--deep)}
+  .foot{display:flex;justify-content:space-between;gap:34px;flex-wrap:wrap;align-items:flex-start}
+  .foot h4{color:var(--heading);font-family:var(--display);font-size:16px;font-weight:600;margin-bottom:6px}
+  .foot p{font-size:15px}
+  .links{display:flex;gap:12px;flex-wrap:wrap}
+  .links a{
+    border:1px solid var(--line);border-radius:999px;padding:9px 17px;
+    font-size:14px;color:var(--body);font-weight:500;transition:all .2s;
+  }
+  .links a:hover{color:var(--heading);border-color:rgba(166,86,255,.45)}
+  .copyright{margin-top:36px;font-size:13px;color:var(--muted);text-align:center}
+
+  /* ---------- появление ---------- */
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.on{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){
+    .reveal{opacity:1;transform:none;transition:none}
+    html{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <img src="icon.png" alt="">
+    <b>Mishi Glance</b>
+    <nav>
+      <a href="#how">Как это работает</a>
+      <a href="#features">Возможности</a>
+      <a class="mini" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg">Скачать</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <img class="icon" src="icon.png" alt="Mishi Glance">
+    <h1>Смотрите фото <span>всей папкой</span></h1>
+    <p class="lead">
+      Открыли одно изображение — листайте остальные стрелками.
+      Без возвращения в Finder, без лишних окон, без ожидания.
+    </p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg">
+        Скачать для Mac
+      </a>
+      <a class="btn ghost" href="#how">Посмотреть, как работает</a>
+    </div>
+    <p class="meta">Бесплатно · <b>macOS 15</b> и новее · 3 МБ · Apple Silicon и Intel</p>
+  </div>
+  <div class="shot-hero reveal"><img src="viewer.png" alt="Окно просмотра"></div>
+</section>
+
+<section class="band" id="how">
+  <div class="wrap center">
+    <p class="eyebrow">Зачем это нужно</p>
+    <h2>Один клик вместо десяти</h2>
+    <p class="sub">
+      В macOS двойной клик по фотографии открывает её — и на этом всё.
+      Чтобы увидеть следующую, нужно закрыть окно и вернуться в папку.
+    </p>
+    <div class="compare">
+      <div class="card reveal">
+        <span class="mark">😕</span>
+        <h3>Как обычно</h3>
+        <p>Открыли фото. Посмотрели. Закрыли. Вернулись в папку.
+           Открыли следующее. И так сто раз подряд.</p>
+      </div>
+      <div class="card good reveal">
+        <span class="mark">✨</span>
+        <h3>С Mishi Glance</h3>
+        <p>Открыли фото и нажимаете стрелку. Вся папка пролистывается
+           одним пальцем — так же быстро, как вы успеваете смотреть.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div class="copy">
+      <p class="eyebrow">Вся папка перед глазами</p>
+      <h2>Список файлов рядом</h2>
+      <p class="sub">
+        Нужно вернуться к снимку, который был десять кадров назад?
+        Откройте список — все изображения папки видны сразу.
+        Списком с именами или крупной сеткой, как удобнее.
+      </p>
+    </div>
+    <div class="frame tall reveal"><img src="browser-list.png" alt="Список файлов папки"></div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap split flip">
+    <div class="copy">
+      <p class="eyebrow">Один раз настроить</p>
+      <h2>Открывается по умолчанию</h2>
+      <p class="sub">
+        Отметьте форматы, которые хотите открывать в Mishi Glance —
+        или все сразу одной кнопкой. После этого двойной клик
+        по любому фото в Finder будет открывать именно его.
+      </p>
+    </div>
+    <div class="frame reveal"><img src="settings-filetypes.png" alt="Выбор форматов"></div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap center">
+    <p class="eyebrow">Возможности</p>
+    <h2>Всё, чего ждёшь от просмотрщика</h2>
+    <div class="grid">
+      <div class="tile reveal">
+        <div class="ico">⌨️</div>
+        <h3>Листание чем угодно</h3>
+        <p>Стрелки, пробел, свайп двумя пальцами по трекпаду. Как вам привычнее.</p>
+      </div>
+      <div class="tile reveal">
+        <div class="ico">🔍</div>
+        <h3>Масштаб и поворот</h3>
+        <p>Приближайте щипком, разглядывайте детали, поворачивайте кадр. Файл при этом не меняется.</p>
+      </div>
+      <div class="tile reveal">
+        <div class="ico">🖥</div>
+        <h3>Полный экран</h3>
+        <p>Одна клавиша — и ничего, кроме фотографии. Курсор пропадает сам.</p>
+      </div>
+      <div class="tile reveal">
+        <div class="ico">🗂</div>
+        <h3>Порядок как в Finder</h3>
+        <p>По имени, дате или размеру — тот же порядок, что вы видите в папке.</p>
+      </div>
+      <div class="tile reveal">
+        <div class="ico">ℹ️</div>
+        <h3>Всё о снимке</h3>
+        <p>Размер, вес, камера, объектив, выдержка и дата съёмки — в одной панели.</p>
+      </div>
+      <div class="tile reveal">
+        <div class="ico">🔄</div>
+        <h3>Обновляется само</h3>
+        <p>Новая версия приходит сама. Ничего скачивать и переустанавливать не нужно.</p>
+      </div>
+    </div>
+
+    <div class="keys">
+      <div class="key"><b>←</b> <b>→</b> &nbsp;листать</div>
+      <div class="key"><b>F</b> &nbsp;во весь экран</div>
+      <div class="key"><b>⌘0</b> &nbsp;вписать в окно</div>
+      <div class="key"><b>⌘1</b> &nbsp;реальный размер</div>
+      <div class="key"><b>⌘I</b> &nbsp;о снимке</div>
+      <div class="key"><b>⌘B</b> &nbsp;список папки</div>
+    </div>
+  </div>
+</section>
+
+<section class="band final">
+  <div class="wrap">
+    <h2>Попробуйте прямо сейчас</h2>
+    <p class="sub" style="margin:0 auto 34px">
+      Скачайте, перетащите в «Программы» и откройте любую фотографию.
+      Дальше всё понятно без инструкции.
+    </p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg">
+        Скачать бесплатно
+      </a>
+    </div>
+    <p class="meta">Приложение проверено Apple — открывается сразу, без предупреждений</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <h4>Андрей Любиченко</h4>
+        <p>Студия <a href="https://coderok.ru">Coderok</a>, Санкт-Петербург.<br>
+           Сайты, мобильные приложения и CRM.</p>
+      </div>
+      <div class="links">
+        <a href="https://t.me/coderok_official">Telegram</a>
+        <a href="https://coderok.ru">coderok.ru</a>
+        <a href="mailto:info@coderok.ru">Написать</a>
+        <a href="https://github.com/Coderok-ru/mishi_glance">Исходный код</a>
+      </div>
+    </div>
+    <p class="copyright">© 2026 Coderok</p>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
+    }
+  }, { rootMargin: '0px 0px -60px 0px' });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+
+</body>
+</html>
