@@ -43,6 +43,8 @@ enum ShortcutCatalog {
             ShortcutItem(keys: ["⌘", "L"], title: "Повернуть влево"),
             ShortcutItem(keys: ["F"], title: "Во весь экран, выход — Esc"),
             ShortcutItem(keys: ["⌘", "\\"], title: "Сравнить со следующим"),
+            ShortcutItem(keys: ["S"], title: "Слайдшоу, пауза — ещё раз"),
+            ShortcutItem(keys: ["⌥", "⌘", "C"], title: "Пипетка: цвет под курсором"),
         ]),
         ShortcutGroup(title: "Отбор кадров", symbol: "checkmark.circle", items: [
             ShortcutItem(keys: ["P"], title: "Отобрать"),
@@ -59,6 +61,7 @@ enum ShortcutCatalog {
             ShortcutItem(keys: ["⇧", "⌘", "R"], title: "Показать в Finder"),
             ShortcutItem(keys: ["⌘", "⌫"], title: "Переместить в Корзину"),
             ShortcutItem(keys: ["⌘", "O"], title: "Открыть файл или папку"),
+            ShortcutItem(keys: ["⌘", "P"], title: "Напечатать"),
         ]),
     ]
 

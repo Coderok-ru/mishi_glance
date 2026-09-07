@@ -38,6 +38,16 @@ final class ViewerController {
     /// Второй снимок для сравнения бок о бок.
     private(set) var compareEntry: ImageEntry?
     private(set) var compareImage: DecodedImage?
+    var compareMode: CompareMode = .sideBySide
+    /// Прозрачность верхнего кадра при наложении.
+    var compareOpacity = 0.5
+
+    private(set) var isSlideshowRunning = false
+    /// Режим пипетки: цвет читается под курсором.
+    var isSamplingColor = false {
+        didSet { if !isSamplingColor { sampledColor = nil } }
+    }
+    private(set) var sampledColor: SampledColor?
 
     var showInfoPanel = false
     var overlayVisible = true
@@ -66,6 +76,8 @@ final class ViewerController {
     @ObservationIgnored private let loader = ImageLoader.shared
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var overlayHideTask: Task<Void, Never>?
+    @ObservationIgnored private var slideshowTask: Task<Void, Never>?
+    @ObservationIgnored private var sampler: PixelSampler?
 
     init() {
         folder.onFolderChanged = { [weak self] in
@@ -119,6 +131,8 @@ final class ViewerController {
         metadata = nil
         histogram = nil
         animation = nil
+        sampler = nil
+        sampledColor = nil
         isAnimationPlaying = true
         livePhotoVideo = entry.livePhotoVideoURL
 
@@ -178,6 +192,76 @@ final class ViewerController {
         let size = screen?.frame.size ?? CGSize(width: 1920, height: 1080)
         let backing = screen?.backingScaleFactor ?? 2
         return Int((max(size.width, size.height) * backing).rounded())
+    }
+
+    // MARK: - Слайдшоу
+
+    func toggleSlideshow() {
+        isSlideshowRunning ? stopSlideshow() : startSlideshow()
+    }
+
+    func startSlideshow() {
+        guard folder.count > 1 else { return }
+        isSlideshowRunning = true
+        flashOverlay()
+        slideshowTask?.cancel()
+        slideshowTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let interval = AppSettings.slideshowInterval
+                try? await Task.sleep(for: .seconds(interval))
+                guard !Task.isCancelled, let self, self.isSlideshowRunning else { return }
+                // Листаем напрямую, чтобы next() не остановил показ.
+                if self.folder.goNext() { await self.reloadCurrent() } else { self.stopSlideshow() }
+            }
+        }
+    }
+
+    func stopSlideshow() {
+        slideshowTask?.cancel()
+        slideshowTask = nil
+        guard isSlideshowRunning else { return }
+        isSlideshowRunning = false
+        flashOverlay()
+    }
+
+    // MARK: - Пипетка
+
+    /// `point` — координата внутри изображения в его собственных пикселях.
+    func sampleColor(atImagePoint point: CGPoint) {
+        guard isSamplingColor, let displayed else { return }
+        if sampler == nil { sampler = PixelSampler(image: displayed.image) }
+        // Буфер строится по фактическому кадру, который может быть уменьшен
+        // относительно оригинала, — приводим координату к его масштабу.
+        let ratio = Double(displayed.image.width) / max(displayed.pixelSize.width, 1)
+        sampledColor = sampler?.color(atX: Int(point.x * ratio), y: Int(point.y * ratio))
+    }
+
+    func copySampledColor() {
+        guard let sampledColor else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(sampledColor.hex, forType: .string)
+        flashOverlay()
+    }
+
+    // MARK: - Печать
+
+    func printCurrent() {
+        guard let displayed, let window else { return }
+        let info = NSPrintInfo.shared
+        info.orientation = displayed.pixelSize.width > displayed.pixelSize.height
+            ? .landscape : .portrait
+        info.horizontalPagination = .fit
+        info.verticalPagination = .fit
+        info.isHorizontallyCentered = true
+        info.isVerticallyCentered = true
+
+        let view = PrintableImageView(image: displayed.image, printInfo: info)
+        let operation = NSPrintOperation(view: view, printInfo: info)
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        operation.jobTitle = folder.current?.name ?? "Изображение"
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
     }
 
     // MARK: - Отбраковка
@@ -259,10 +343,10 @@ final class ViewerController {
 
     // MARK: - Navigation
 
-    func next() { if folder.goNext() { endCompare(); Task { await reloadCurrent() } } }
-    func previous() { if folder.goPrevious() { endCompare(); Task { await reloadCurrent() } } }
-    func first() { if folder.goFirst() { endCompare(); Task { await reloadCurrent() } } }
-    func last() { if folder.goLast() { endCompare(); Task { await reloadCurrent() } } }
+    func next() { stopSlideshow(); if folder.goNext() { endCompare(); Task { await reloadCurrent() } } }
+    func previous() { stopSlideshow(); if folder.goPrevious() { endCompare(); Task { await reloadCurrent() } } }
+    func first() { stopSlideshow(); if folder.goFirst() { endCompare(); Task { await reloadCurrent() } } }
+    func last() { stopSlideshow(); if folder.goLast() { endCompare(); Task { await reloadCurrent() } } }
 
     private func endCompare() {
         compareEntry = nil
@@ -302,7 +386,7 @@ final class ViewerController {
         guard image.width > 0, image.height > 0, viewportSize.width > 0, viewportSize.height > 0 else {
             return 1
         }
-        let available = isComparing
+        let available = (isComparing && compareMode == .sideBySide)
             ? CGSize(width: (viewportSize.width - 8) / 2, height: viewportSize.height)
             : viewportSize
         let raw = min(available.width / image.width, available.height / image.height)
@@ -426,7 +510,11 @@ final class ViewerController {
         case .rejected: parts.append("отклонено")
         case nil: break
         }
-        if let compareEntry { parts.append("сравнение с \(compareEntry.name)") }
+        if let compareEntry {
+            parts.append("\(compareMode.title.lowercased()) с \(compareEntry.name)")
+        }
+        if isSlideshowRunning { parts.append("слайдшоу") }
+        if let sampledColor { parts.append("\(sampledColor.hex) · \(sampledColor.rgbText)") }
         if !isFitMode {
             parts.append("\(zoomPercent) %")
         }

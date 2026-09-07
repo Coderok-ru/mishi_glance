@@ -15,6 +15,7 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
 
     private let backdropLayer = CALayer()
     private let imageLayer = CALayer()
+    private let overlayLayer = CALayer()
     private var lastDragPoint: CGPoint?
     private var dragOrigin: CGPoint?
     private var isDraggingFileOut = false
@@ -37,6 +38,9 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         wantsLayer = true
         layer?.addSublayer(backdropLayer)
         layer?.addSublayer(imageLayer)
+        layer?.addSublayer(overlayLayer)
+        overlayLayer.contentsGravity = .resize
+        overlayLayer.isHidden = true
         backdropLayer.contentsGravity = .resize
         imageLayer.contentsGravity = .resize
         imageLayer.isOpaque = false
@@ -132,6 +136,20 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         liveLayer = nil
     }
 
+    /// Второй кадр поверх первого. Режим разницы делает сама Core Animation
+    /// через фильтр композиции — считать попиксельно не нужно.
+    func setOverlay(_ image: CGImage?, opacity: Double, difference: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        overlayLayer.contents = image
+        overlayLayer.isHidden = (image == nil)
+        overlayLayer.opacity = difference ? 1 : Float(opacity)
+        overlayLayer.compositingFilter = difference ? "differenceBlendMode" : nil
+        overlayLayer.contentsScale = window?.backingScaleFactor ?? 2
+        CATransaction.commit()
+        applyTransform()
+    }
+
     func setImage(_ image: CGImage?) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -172,6 +190,11 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         imageLayer.bounds = CGRect(origin: .zero, size: scaled)
         imageLayer.position = position
         imageLayer.transform = transform
+        if !overlayLayer.isHidden {
+            overlayLayer.bounds = imageLayer.bounds
+            overlayLayer.position = position
+            overlayLayer.transform = transform
+        }
         if let liveLayer {
             liveLayer.bounds = imageLayer.bounds
             liveLayer.position = position
@@ -287,6 +310,11 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         lastDragPoint = nil
         dragOrigin = nil
         guard !isDraggingFileOut else { return }
+        if controller?.isSamplingColor == true, event.clickCount == 1 {
+            sampleColor(at: convert(event.locationInWindow, from: nil))
+            controller?.copySampledColor()
+            return
+        }
         // Live Photo оживает по одиночному клику, как в «Фото».
         if event.clickCount == 1, let controller, controller.hasLivePhoto {
             playLivePhoto(controller.livePhotoVideo)
@@ -305,10 +333,29 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
     override func mouseMoved(with event: NSEvent) {
         showCursorAndScheduleHide()
         controller?.flashOverlay()
+        if controller?.isSamplingColor == true {
+            sampleColor(at: convert(event.locationInWindow, from: nil))
+        }
+    }
+
+    /// Переводит точку окна в координаты пикселя изображения. Слой сам знает
+    /// свой сдвиг и поворот, поэтому пересчёт отдаём ему.
+    private func sampleColor(at point: CGPoint) {
+        guard let controller, let displayed = controller.displayed,
+              let root = layer, controller.scale > 0 else { return }
+        let inLayer = imageLayer.convert(point, from: root)
+        let x = inLayer.x / controller.scale
+        // У слоя начало отсчёта снизу, у изображения — сверху.
+        let y = displayed.pixelSize.height - inLayer.y / controller.scale
+        controller.sampleColor(atImagePoint: CGPoint(x: x, y: y))
     }
 
     override func resetCursorRects() {
         super.resetCursorRects()
+        if controller?.isSamplingColor == true {
+            addCursorRect(bounds, cursor: .crosshair)
+            return
+        }
         if AppSettings.dragBehavior == .dragOut {
             addCursorRect(bounds, cursor: .openHand)
         } else if controller?.canPan == true {
@@ -430,6 +477,9 @@ struct ImageCanvas: NSViewRepresentable {
     let isPlaying: Bool
     var pixelSize: CGSize?
     var isSecondary = false
+    var overlayImage: CGImage?
+    var overlayOpacity: Double = 0.5
+    var overlayIsDifference = false
 
     func makeNSView(context: Context) -> ImageCanvasNSView {
         let view = ImageCanvasNSView(frame: .zero)
@@ -449,6 +499,7 @@ struct ImageCanvas: NSViewRepresentable {
             view.setImage(image)
         }
         view.applyTransform()
+        view.setOverlay(overlayImage, opacity: overlayOpacity, difference: overlayIsDifference)
         view.setAnimation(animation, playing: isPlaying)
         view.window?.invalidateCursorRects(for: view)
     }

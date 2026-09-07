@@ -44,6 +44,10 @@ struct ViewerView: View {
             VStack {
                 Spacer()
                 VStack(spacing: 10) {
+                    if controller.isComparing {
+                        CompareControls(controller: controller)
+                            .onHover { controller.pinOverlay = $0 }
+                    }
                     if controller.displayed != nil {
                         ViewerToolbar(controller: controller)
                             .onHover { controller.pinOverlay = $0 }
@@ -76,7 +80,9 @@ struct ViewerView: View {
     @ViewBuilder
     private var content: some View {
         if let displayed = controller.displayed {
-            if controller.isComparing {
+            if controller.isComparing, controller.compareMode != .sideBySide {
+                canvas(for: displayed, secondary: false).ignoresSafeArea()
+            } else if controller.isComparing {
                 HStack(spacing: 8) {
                     canvas(for: displayed, secondary: false)
                     if let other = controller.compareImage {
@@ -102,7 +108,8 @@ struct ViewerView: View {
     }
 
     private func canvas(for image: DecodedImage, secondary: Bool) -> some View {
-        ImageCanvas(
+        let blended = controller.isComparing && controller.compareMode != .sideBySide
+        return ImageCanvas(
             controller: controller,
             image: image.image,
             scale: controller.scale,
@@ -111,7 +118,10 @@ struct ViewerView: View {
             animation: secondary ? nil : controller.animation,
             isPlaying: controller.isAnimationPlaying,
             pixelSize: image.pixelSize,
-            isSecondary: secondary
+            isSecondary: secondary,
+            overlayImage: blended ? controller.compareImage?.image : nil,
+            overlayOpacity: controller.compareOpacity,
+            overlayIsDifference: controller.compareMode == .difference
         )
     }
 
@@ -141,5 +151,47 @@ struct StatusOverlayView: View {
             .background(.black.opacity(0.55), in: Capsule())
             .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
             .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+    }
+}
+
+
+/// Переключатель режимов сравнения и ползунок прозрачности.
+struct CompareControls: View {
+    @Bindable var controller: ViewerController
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Picker("", selection: $controller.compareMode) {
+                ForEach(CompareMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 240)
+
+            if controller.compareMode == .overlay {
+                Slider(value: $controller.compareOpacity, in: 0 ... 1)
+                    .frame(width: 120)
+                Text("\(Int(controller.compareOpacity * 100)) %")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(width: 38, alignment: .trailing)
+            }
+
+            Button {
+                controller.toggleCompareWithNext()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.8))
+            .help("Закончить сравнение")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.black.opacity(0.55), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
     }
 }

@@ -74,6 +74,23 @@ enum ViewerBackground: String, CaseIterable, Identifiable, Sendable {
     var color: Color { Color(nsColor: nsColor) }
 }
 
+/// Как показывать два кадра при сравнении.
+enum CompareMode: String, CaseIterable, Identifiable, Sendable {
+    case sideBySide
+    case overlay
+    case difference
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .sideBySide: "Рядом"
+        case .overlay: "Наложение"
+        case .difference: "Разница"
+        }
+    }
+}
+
 /// Layout of the folder browser window.
 enum BrowserViewMode: String, CaseIterable, Identifiable, Sendable {
     case list
@@ -143,6 +160,7 @@ enum SettingsKey {
     static let automaticUpdateChecks = "automaticUpdateChecks"
     static let lastUpdateCheck = "lastUpdateCheck"
     static let didShowWelcome = "didShowWelcome"
+    static let slideshowInterval = "slideshowInterval"
 }
 
 enum AppSettings {
@@ -168,6 +186,7 @@ enum AppSettings {
             SettingsKey.transparencyMode: TransparencyMode.checkerboard.rawValue,
             SettingsKey.preloadBufferMB: 300,
             SettingsKey.automaticUpdateChecks: true,
+            SettingsKey.slideshowInterval: 4.0,
         ])
     }
 
@@ -234,6 +253,12 @@ enum AppSettings {
     static var lastUpdateCheck: Date {
         get { UserDefaults.standard.object(forKey: SettingsKey.lastUpdateCheck) as? Date ?? .distantPast }
         set { UserDefaults.standard.set(newValue, forKey: SettingsKey.lastUpdateCheck) }
+    }
+
+    /// Пауза между кадрами слайдшоу в секундах.
+    static var slideshowInterval: Double {
+        let value = UserDefaults.standard.double(forKey: SettingsKey.slideshowInterval)
+        return value < 0.5 ? 4 : value
     }
 
     static var didShowWelcome: Bool {

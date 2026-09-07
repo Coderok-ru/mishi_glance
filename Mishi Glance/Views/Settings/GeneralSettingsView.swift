@@ -20,6 +20,7 @@ struct GeneralSettingsView: View {
     @AppStorage(SettingsKey.wrapAround) private var wrapAround = true
     @AppStorage(SettingsKey.confirmDelete) private var confirmDelete = true
     @AppStorage(SettingsKey.automaticUpdateChecks) private var automaticUpdateChecks = true
+    @AppStorage(SettingsKey.slideshowInterval) private var slideshowInterval = 4.0
 
     private var lastCheckText: String {
         let last = AppSettings.lastUpdateCheck
@@ -70,6 +71,21 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Спрашивать подтверждение при удалении", isOn: $confirmDelete)
+            }
+
+            Section("Слайдшоу") {
+                HStack {
+                    Text("Пауза между кадрами")
+                    Spacer()
+                    TextField("", value: $slideshowInterval, format: .number.precision(.fractionLength(1)))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 70)
+                        .multilineTextAlignment(.trailing)
+                        .onChange(of: slideshowInterval) {
+                            slideshowInterval = min(max(slideshowInterval, 0.5), 60)
+                        }
+                    Text("сек.")
+                }
             }
 
             Section("Обновления") {

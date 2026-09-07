@@ -251,7 +251,8 @@ func titles(of menuTitle: String) -> [String] {
 }
 let top = mainMenu?.items.map(\.title) ?? []
 check("разделы верхнего меню",
-      top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Отбор", "Справка", "Окно"],
+      top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Отбор",
+              "Инструменты", "Справка", "Окно"],
       top.joined(separator: " · "))
 
 let appItems = titles(of: "Mishi Glance")
@@ -264,6 +265,9 @@ check("стоит выше «Настройки…»",
 for (menu, item) in [("Файл","Экспортировать…"), ("Вид","Сравнить со следующим"),
                      ("Отбор","Отобрать  (P)"), ("Отбор","Отклонить  (X)"),
                      ("Отбор","Переместить отобранные…"), ("Отбор","Отклонённые в Корзину…"),
+                     ("Инструменты","Пакетное переименование…"),
+                     ("Инструменты","Найти повторы…"),
+                     ("Файл","Напечатать…"), ("Вид","Слайдшоу"), ("Вид","Пипетка"),
                      ("Справка","Клавиши…"), ("Справка","Знакомство с программой…"),
                      ("Файл","Поделиться…"), ("Файл","Открыть в программе"),
                      ("Файл","Показать в Finder"), ("Вид","Изображения в папке"),
@@ -533,6 +537,132 @@ let inline = AttributedString.inlineMarkdown("**жирный** и `код`")
 check("строчная разметка разобрана", !String(inline.characters).contains("**"),
       String(inline.characters))
 check("пустой текст не ломает разбор", MarkdownBlock.parse("").isEmpty)
+
+print("\n[V] Пипетка")
+let flatURL = sortDir.appendingPathComponent("flat.png")   // сплошной 64,128,192
+if let img = ImageDecoder.decode(url: flatURL, maxPixelSize: nil),
+   let sampler = PixelSampler(image: img.image) {
+    let c = sampler.color(atX: 10, y: 10)
+    check("цвет пикселя прочитан", c?.red == 64 && c?.green == 128 && c?.blue == 192,
+          c.map { "\($0.red),\($0.green),\($0.blue)" } ?? "nil")
+    check("HEX собран верно", c?.hex == "#4080C0", c?.hex ?? "nil")
+    check("RGB текстом", c?.rgbText == "64, 128, 192", c?.rgbText ?? "nil")
+    check("за границей — ничего", sampler.color(atX: -1, y: 0) == nil
+          && sampler.color(atX: 99_999, y: 0) == nil)
+} else {
+    check("пипетка построена", false)
+}
+
+print("\n[W] Поиск повторов")
+let dupDir = URL(fileURLWithPath: CommandLine.arguments[4])
+let dupEntries = (try? FileManager.default.contentsOfDirectory(
+    at: dupDir, includingPropertiesForKeys: nil))?.compactMap { ImageEntry(url: $0) } ?? []
+check("файлов в наборе: 5", dupEntries.count == 5, "\(dupEntries.count)")
+
+let h1 = DuplicateFinder.perceptualHash(of: dupDir.appendingPathComponent("original.png"))
+let h2 = DuplicateFinder.perceptualHash(of: dupDir.appendingPathComponent("copy.png"))
+let h3 = DuplicateFinder.perceptualHash(of: dupDir.appendingPathComponent("recompressed.jpg"))
+let h4 = DuplicateFinder.perceptualHash(of: dupDir.appendingPathComponent("small.jpg"))
+let h5 = DuplicateFinder.perceptualHash(of: dupDir.appendingPathComponent("different.png"))
+check("хеши посчитаны", [h1,h2,h3,h4,h5].allSatisfy { $0 != nil })
+check("точная копия — расстояние 0", DuplicateFinder.distance(h1!, h2!) == 0,
+      "\(DuplicateFinder.distance(h1!, h2!))")
+check("пережатая — близко", DuplicateFinder.distance(h1!, h3!) <= 6,
+      "\(DuplicateFinder.distance(h1!, h3!))")
+check("уменьшенная — близко", DuplicateFinder.distance(h1!, h4!) <= 6,
+      "\(DuplicateFinder.distance(h1!, h4!))")
+check("другой кадр — далеко", DuplicateFinder.distance(h1!, h5!) > 10,
+      "\(DuplicateFinder.distance(h1!, h5!))")
+
+let groups = DuplicateFinder.find(in: dupEntries, threshold: 6)
+check("найдена одна группа", groups.count == 1, "\(groups.count)")
+check("в группе 4 файла", groups.first?.entries.count == 4,
+      groups.first.map { "\($0.entries.count)" } ?? "нет")
+check("другой кадр не попал",
+      groups.first?.entries.contains { $0.name == "different.png" } == false)
+check("крупный файл первым",
+      groups.first?.entries.first?.fileSize ?? 0 >= groups.first?.entries.last?.fileSize ?? 0)
+check("подсчитано освобождаемое место", (groups.first?.reclaimableBytes ?? 0) > 0,
+      ByteFormat.string(groups.first?.reclaimableBytes ?? 0))
+// Нулевой порог оставляет только неотличимые.
+let strict = DuplicateFinder.find(in: dupEntries, threshold: 0)
+check("строгий порог даёт меньшую группу",
+      (strict.first?.entries.count ?? 0) <= (groups.first?.entries.count ?? 0),
+      "\(strict.first?.entries.count ?? 0)")
+
+print("\n[X] Переименование по шаблону")
+let renameDir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("mg-rename-\(UUID().uuidString)")
+try? FileManager.default.createDirectory(at: renameDir, withIntermediateDirectories: true)
+for name in ["a.jpg", "b.jpg", "c.png"] {
+    try? FileManager.default.copyItem(at: sortDir.appendingPathComponent("square.jpg"),
+                                      to: renameDir.appendingPathComponent(name))
+}
+let toRename = (try? FileManager.default.contentsOfDirectory(at: renameDir,
+    includingPropertiesForKeys: nil))?.compactMap { ImageEntry(url: $0) }
+    .sorted { $0.name < $1.name } ?? []
+check("файлов для переименования: 3", toRename.count == 3, "\(toRename.count)")
+
+let numbered = BatchRenamer.plan(for: toRename, template: "кадр_{nnn}", startIndex: 1)
+check("нумерация с ведущими нулями",
+      numbered.map(\.newName) == ["кадр_001.jpg", "кадр_002.jpg", "кадр_003.png"],
+      numbered.map(\.newName).joined(separator: " · "))
+check("расширение сохранено", numbered.allSatisfy { $0.newName.contains(".") })
+check("конфликтов нет", numbered.allSatisfy { !$0.isConflicting })
+
+let withStart = BatchRenamer.plan(for: toRename, template: "{n}", startIndex: 10)
+check("старт с указанного номера", withStart.first?.newName == "10.jpg",
+      withStart.first?.newName ?? "nil")
+
+// Шаблон без номера обязан развести одинаковые имена.
+let same = BatchRenamer.plan(for: toRename, template: "снимок")
+check("одинаковые имена разведены", Set(same.map(\.newName)).count == same.count,
+      same.map(\.newName).joined(separator: " · "))
+
+let unsafe = BatchRenamer.plan(for: toRename, template: "a/b:c{n}")
+check("запрещённые знаки убраны",
+      unsafe.allSatisfy { !$0.newName.contains("/") && !$0.newName.contains(":") },
+      unsafe.first?.newName ?? "nil")
+
+let outcome = BatchRenamer.apply(numbered)
+check("переименовано 3", outcome.renamed == 3, "\(outcome.renamed)")
+check("ошибок нет", outcome.failed.isEmpty)
+let after = Set(((try? FileManager.default.contentsOfDirectory(atPath: renameDir.path)) ?? []))
+check("новые имена на диске", after.contains("кадр_001.jpg") && after.contains("кадр_003.png"),
+      after.sorted().joined(separator: " · "))
+try? FileManager.default.removeItem(at: renameDir)
+
+print("\n[Y] Режимы сравнения и вкладки")
+check("режимов сравнения: 3", CompareMode.allCases.count == 3)
+check("по умолчанию — рядом", viewer.controller.compareMode == .sideBySide)
+viewer.controller.compareMode = .difference
+check("режим переключается", viewer.controller.compareMode == .difference)
+viewer.controller.compareMode = .sideBySide
+check("окно допускает вкладки", viewer.window?.tabbingMode == .preferred)
+check("общий идентификатор вкладок",
+      viewer.window?.tabbingIdentifier == "MishiGlanceViewer",
+      viewer.window?.tabbingIdentifier ?? "nil")
+check("заголовок окна виден для корешка", viewer.window?.titleVisibility == .visible)
+
+print("\n[Z] Службы в контекстном меню Finder")
+let services = Bundle.main.infoDictionary?["NSServices"] as? [[String: Any]]
+if let services {
+    check("объявлено служб: 2", services.count == 2, "\(services.count)")
+    let messages = services.compactMap { $0["NSMessage"] as? String }
+    check("обработчик открытия", messages.contains("openFromFinder"))
+    check("обработчик конвертации", messages.contains("convertToJPEGFromFinder"))
+    check("принимают изображения", services.allSatisfy {
+        ($0["NSSendFileTypes"] as? [String])?.contains("public.image") == true })
+} else {
+    // В CLI-харнессе своего Info.plist нет — проверяем файл проекта.
+    let plist = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .deletingLastPathComponent().appendingPathComponent("Info.plist")
+    let text = (try? String(contentsOf: plist, encoding: .utf8)) ?? ""
+    check("службы объявлены в Info.plist", text.contains("openFromFinder")
+          && text.contains("convertToJPEGFromFinder"))
+    check("пункт открытия назван", text.contains("Открыть в Mishi Glance"))
+    check("пункт конвертации назван", text.contains("Конвертировать в JPEG"))
+}
 
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)

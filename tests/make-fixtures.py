@@ -41,6 +41,24 @@ def build(root):
     Image.new("RGB", (200, 200), (64, 128, 192)).save(os.path.join(sortd, "flat.png"))
     # С альфа-каналом и 16 битами на канал.
     Image.new("RGBA", (80, 80), (10, 20, 30, 128)).save(os.path.join(sortd, "alpha.png"))
+    # Набор для поиска повторов: оригинал, точная копия, пережатая
+    # и уменьшенная версии плюс заведомо другой кадр.
+    dup = os.path.join(root, "dup")
+    os.makedirs(dup, exist_ok=True)
+    for f in os.listdir(dup):
+        os.remove(os.path.join(dup, f))
+    src = Image.new("RGB", (600, 400))
+    d = ImageDraw.Draw(src)
+    for x in range(0, 600, 30):
+        d.rectangle([x, 0, x + 15, 400], fill=(x % 255, 120, 200 - x % 200))
+    d.ellipse([200, 100, 400, 300], fill=(250, 240, 60))
+    src.save(os.path.join(dup, "original.png"))
+    src.save(os.path.join(dup, "copy.png"))
+    src.save(os.path.join(dup, "recompressed.jpg"), quality=35)
+    src.resize((300, 200)).save(os.path.join(dup, "small.jpg"), quality=80)
+    other = Image.new("RGB", (600, 400), (20, 30, 40))
+    ImageDraw.Draw(other).ellipse([50, 50, 550, 350], fill=(240, 240, 240))
+    other.save(os.path.join(dup, "different.png"))
     return basic, sortd
 
 if __name__ == "__main__":

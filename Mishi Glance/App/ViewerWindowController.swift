@@ -44,11 +44,14 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.titleVisibility = .visible
         window.isMovableByWindowBackground = false
         window.minSize = NSSize(width: 420, height: 320)
         window.collectionBehavior.insert(.fullScreenPrimary)
-        window.tabbingMode = .disallowed
+        // Родные вкладки macOS: панель, переключение ⌘⇧[ и ⌘⇧],
+        // «Объединить все окна» — всё это система даёт сама.
+        window.tabbingMode = .preferred
+        window.tabbingIdentifier = "MishiGlanceViewer"
 
         super.init(window: window)
 
@@ -199,6 +202,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
                 return true
             }
             switch characters {
+            case "s", "ы": controller.toggleSlideshow(); return true
             case "p", "з": controller.setFlag(.picked); return true
             case "x", "ч": controller.setFlag(.rejected); return true
             case "u", "г": controller.setFlag(nil); return true

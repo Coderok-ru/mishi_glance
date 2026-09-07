@@ -23,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var shortcutsWindow: NSWindow?
     private var welcomeWindow: NSWindow?
     private let exportController = ExportController()
+    private var duplicatesWindow: NSWindow?
+    private let duplicatesController = DuplicatesController()
+    private var renameWindow: NSWindow?
+    private let renameController = RenameController()
     private var openWithMenu: NSMenu?
 
     // MARK: - Lifecycle
@@ -33,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Self.shared = self
         AppSettings.registerDefaults()
         NSApp.mainMenu = buildMainMenu()
+        // Пункты в контекстном меню Finder — работают, даже когда
+        // приложение закрыто: система запустит его сама.
+        NSApp.servicesProvider = self
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -167,6 +174,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc func toggleCompare(_ sender: Any?) { activeViewer?.toggleCompareWithNext() }
+
+    @objc func findDuplicates(_ sender: Any?) {
+        duplicatesController.viewer = activeViewer
+        duplicatesWindow = present(duplicatesWindow, title: "Повторы",
+                                   view: DuplicatesView(controller: duplicatesController))
+    }
+
+    @objc func batchRename(_ sender: Any?) {
+        renameController.viewer = activeViewer
+        renameController.refresh()
+        renameWindow = present(renameWindow, title: "Переименование",
+                               view: RenameView(controller: renameController))
+    }
+
+    /// Показывает окно, переиспользуя уже созданное.
+    private func present<V: View>(_ existing: NSWindow?, title: String, view: V) -> NSWindow {
+        if let existing {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return existing
+        }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        window.title = title
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return window
+    }
+    @objc func printImage(_ sender: Any?) { activeViewer?.printCurrent() }
+    @objc func toggleSlideshow(_ sender: Any?) { activeViewer?.toggleSlideshow() }
+
+    @objc func toggleColorSampler(_ sender: Any?) {
+        guard let viewer = activeViewer else { return }
+        viewer.isSamplingColor.toggle()
+        viewer.flashOverlay()
+    }
     @objc func markPicked(_ sender: Any?) { activeViewer?.setFlag(.picked) }
     @objc func markRejected(_ sender: Any?) { activeViewer?.setFlag(.rejected) }
     @objc func clearMark(_ sender: Any?) { activeViewer?.setFlag(nil) }
@@ -310,6 +355,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         updateWindow = window
     }
 
+    // MARK: - Службы для Finder
+
+    /// «Открыть в Mishi Glance» из контекстного меню Finder.
+    @objc func openFromFinder(_ pasteboard: NSPasteboard, userData: String,
+                              error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        guard let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+              !urls.isEmpty else {
+            error.pointee = "Не удалось прочитать файлы" as NSString
+            return
+        }
+        openFiles(urls)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// «Конвертировать в JPEG» — рядом с исходником, не открывая окно.
+    @objc func convertToJPEGFromFinder(_ pasteboard: NSPasteboard, userData: String,
+                                       error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        guard let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+              !urls.isEmpty else {
+            error.pointee = "Не удалось прочитать файлы" as NSString
+            return
+        }
+        let images = urls.filter { ImageEntry(url: $0) != nil }
+        guard !images.isEmpty else {
+            error.pointee = "Среди выбранного нет изображений" as NSString
+            return
+        }
+
+        let options = ExportOptions(format: .jpeg, quality: 0.9,
+                                    maxPixelSize: nil, keepMetadata: true)
+        Task { @MainActor in
+            var written: [URL] = []
+            var failed: [String] = []
+            for url in images {
+                do {
+                    written.append(try ImageExporter.export(
+                        source: url, to: url.deletingLastPathComponent(), options: options))
+                } catch {
+                    failed.append(url.lastPathComponent)
+                }
+            }
+            if let first = written.first {
+                NSWorkspace.shared.activateFileViewerSelecting(written)
+                _ = first
+            }
+            if !failed.isEmpty {
+                self.report("Не удалось преобразовать: \(failed.count)",
+                            failed.prefix(3).joined(separator: ", "))
+            }
+        }
+    }
+
     // MARK: - Шпаргалка и первый запуск
 
     @objc func showShortcuts(_ sender: Any?) {
@@ -418,6 +515,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(applyRating(_:)):
             menuItem.state = (menuItem.tag == (viewer?.rating ?? 0)) ? .on : .off
             return hasFile
+        case #selector(findDuplicates), #selector(batchRename):
+            return manyImages
+        case #selector(printImage):
+            return hasImage
+        case #selector(toggleSlideshow):
+            menuItem.title = viewer?.isSlideshowRunning == true ? "Остановить слайдшоу" : "Слайдшоу"
+            return manyImages
+        case #selector(toggleColorSampler):
+            menuItem.state = viewer?.isSamplingColor == true ? .on : .off
+            return hasImage
         case #selector(toggleCompare):
             menuItem.title = viewer?.isComparing == true
                 ? "Закончить сравнение" : "Сравнить со следующим"
@@ -503,6 +610,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                                      action: #selector(moveToTrash(_:)), keyEquivalent: "\u{8}")
         trash.keyEquivalentModifierMask = [.command]
         fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Напечатать…", action: #selector(printImage(_:)), keyEquivalent: "p")
+        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Закрыть окно",
                          action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         addSubmenu(fileMenu, titled: "Файл", to: mainMenu)
@@ -539,6 +648,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         descending.representedObject = false
         sortItem.submenu = sortMenu
 
+        viewMenu.addItem(.separator())
+        let slideshow = viewMenu.addItem(withTitle: "Слайдшоу",
+                                         action: #selector(toggleSlideshow(_:)), keyEquivalent: "s")
+        slideshow.keyEquivalentModifierMask = [.command, .option]
+        let sampler = viewMenu.addItem(withTitle: "Пипетка",
+                                       action: #selector(toggleColorSampler(_:)), keyEquivalent: "c")
+        sampler.keyEquivalentModifierMask = [.command, .option]
         viewMenu.addItem(.separator())
         viewMenu.addItem(withTitle: "Сравнить со следующим",
                          action: #selector(toggleCompare(_:)), keyEquivalent: "\\")
@@ -583,6 +699,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         cullMenu.addItem(withTitle: "Отклонённые в Корзину…",
                          action: #selector(trashRejectedFiles(_:)), keyEquivalent: "")
         addSubmenu(cullMenu, titled: "Отбор", to: mainMenu)
+
+        // Инструменты
+        let toolsMenu = NSMenu(title: "Инструменты")
+        toolsMenu.addItem(withTitle: "Пакетное переименование…",
+                          action: #selector(batchRename(_:)), keyEquivalent: "")
+        toolsMenu.addItem(withTitle: "Найти повторы…",
+                          action: #selector(findDuplicates(_:)), keyEquivalent: "")
+        addSubmenu(toolsMenu, titled: "Инструменты", to: mainMenu)
 
         // Справка
         let helpMenu = NSMenu(title: "Справка")

@@ -49,6 +49,33 @@
 	<array>
 		<string>ru</string>
 	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict><key>default</key><string>Открыть в Mishi Glance</string></dict>
+			<key>NSMessage</key>
+			<string>openFromFinder</string>
+			<key>NSPortName</key>
+			<string>Mishi Glance</string>
+			<key>NSRequiredContext</key>
+			<dict><key>NSTextContent</key><string>FilePath</string></dict>
+			<key>NSSendFileTypes</key>
+			<array><string>public.image</string></array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict><key>default</key><string>Конвертировать в JPEG</string></dict>
+			<key>NSMessage</key>
+			<string>convertToJPEGFromFinder</string>
+			<key>NSPortName</key>
+			<string>Mishi Glance</string>
+			<key>NSRequiredContext</key>
+			<dict><key>NSTextContent</key><string>FilePath</string></dict>
+			<key>NSSendFileTypes</key>
+			<array><string>public.image</string></array>
+		</dict>
+	</array>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>
