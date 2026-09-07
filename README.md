@@ -12,8 +12,9 @@
 [![Swift](https://img.shields.io/badge/Swift-5.10-orange?logo=swift)](https://swift.org)
 [![Universal](https://img.shields.io/badge/Universal-arm64%20%2B%20x86__64-blue)]()
 [![Size](https://img.shields.io/badge/размер-3%20МБ-green)]()
+[![Notarized](https://img.shields.io/badge/Apple-нотаризовано-success?logo=apple)]()
 
-[**⬇︎ Скачать Mishi Glance 1.0.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.0.0.dmg)
+[**⬇︎ Скачать Mishi Glance 1.1.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg)
 
 </div>
 
@@ -156,7 +157,7 @@ Sparkle не используется: ТЗ запрещает внешние з
 <img src="docs/dmg-installer.png" width="640" alt="Установщик">
 </div>
 
-> **Пока приложение не нотаризовано у Apple.** При первом запуске macOS попросит подтверждение: правый клик по приложению → «Открыть», либо Системные настройки → «Конфиденциальность и безопасность» → «Открыть всё равно». После нотаризации этот шаг исчезнет.
+Приложение подписано сертификатом Developer ID и **заверено у Apple**, поэтому открывается обычным двойным кликом — без предупреждений и обходных путей. Штамп нотаризации прикреплён и к образу, и к самому приложению, так что проверка проходит даже без интернета.
 
 **Требования:** macOS 15 Sequoia и новее. Universal binary — работает нативно и на Apple Silicon, и на Intel.
 

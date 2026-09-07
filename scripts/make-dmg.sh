@@ -106,6 +106,39 @@ else
     echo "   get-task-allow отсутствует — годится для нотаризации"
 fi
 
+# --- 2b. Нотаризация приложения --------------------------------------------
+# Штамп на самом бандле, а не только на образе: иначе приложение,
+# скопированное из DMG на машину без интернета, нечем проверить —
+# а автообновление копирует его именно так.
+notary_args() {
+    local profile="${AC_KEYCHAIN_PROFILE:-mishi-notary}"
+    if xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1; then
+        echo "--keychain-profile $profile"
+    elif [[ -n "${AC_APPLE_ID:-}" && -n "${AC_PASSWORD:-}" ]]; then
+        local team="${AC_TEAM_ID:-$(grep -m1 DEVELOPMENT_TEAM "Mishi Glance.xcodeproj/project.pbxproj" \
+            | sed -E 's/.*= *([A-Z0-9]+);.*/\1/')}"
+        echo "--apple-id $AC_APPLE_ID --team-id $team --password $AC_PASSWORD"
+    fi
+}
+
+if [[ $NOTARIZE -eq 1 ]]; then
+    NOTARY_ARGS="$(notary_args)"
+    if [[ -z "$NOTARY_ARGS" ]]; then
+        echo "!! Нет учётных данных для нотаризации. Сохраните их один раз:"
+        echo "   xcrun notarytool store-credentials mishi-notary \\"
+        echo "       --apple-id ВАШ@APPLE.ID --team-id FKD7Y4FR88 --password APP-SPECIFIC-PASSWORD"
+        exit 1
+    fi
+    echo "==> Заверяю приложение (1/2)"
+    APPZIP="$BUILD/app-for-notary.zip"
+    rm -f "$APPZIP"
+    /usr/bin/ditto -c -k --keepParent "$APP" "$APPZIP"
+    xcrun notarytool submit "$APPZIP" $NOTARY_ARGS --wait
+    rm -f "$APPZIP"
+    xcrun stapler staple "$APP"
+    xcrun stapler validate "$APP"
+fi
+
 # --- 3. Фон установщика ----------------------------------------------------
 echo "==> Рисую фон в фирменных цветах"
 "$PY" "$ROOT/scripts/dmg_background.py" "$ROOT/scripts/dmg-background.png" >/dev/null
@@ -131,7 +164,7 @@ if [[ -n "${APP_IDENTITY:-}" ]] && codesign --force --sign "$APP_IDENTITY" \
         --timestamp "$DMG" 2>/dev/null; then
     echo "==> Образ подписан: $APP_IDENTITY"
 elif [[ -n "${APP_IDENTITY:-}" ]]; then
-    echo "==> Образ не подписан: ключ от «$APP_IDENTITY» недоступен из терминала"
+    echo "==> Образ не подписан: ключ от «${APP_IDENTITY}» недоступен из терминала"
     echo "   (Xcode подписал приложение облачным сертификатом.)"
     echo "   Само приложение внутри подписано верно — для нотаризации этого достаточно."
     echo "   Чтобы подписывать и образ, создайте локальный сертификат:"
@@ -146,7 +179,7 @@ if [[ $NOTARIZE -eq 1 ]]; then
     fi
     PROFILE="${AC_KEYCHAIN_PROFILE:-mishi-notary}"
     if xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
-        echo "==> Отправляю в Apple (профиль связки ключей «$PROFILE»). Обычно 1–5 минут."
+        echo "==> Отправляю в Apple (профиль связки ключей «${PROFILE}»). Обычно 1–5 минут."
         xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
     else
         if [[ -z "${AC_APPLE_ID:-}" || -z "${AC_PASSWORD:-}" ]]; then
@@ -170,4 +203,4 @@ fi
 echo
 echo "Готово: $DMG  ($(du -h "$DMG" | cut -f1))"
 echo -n "Вердикт Gatekeeper: "
-spctl --assess --type execute "$APP" 2>&1 | sed 's|.*: ||'
+spctl --assess --type execute -v "$APP" 2>&1 | tail -1 | sed "s|^.*: ||"
