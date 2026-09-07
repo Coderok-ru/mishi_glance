@@ -185,6 +185,21 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
             break
         }
 
+        // Цифры 0…5 — рейтинг, P и X — отбор. Все без модификаторов, чтобы
+        // отбраковка шла одной рукой.
+        if let characters = event.charactersIgnoringModifiers?.lowercased(), !control {
+            if let digit = Int(characters), (0 ... 5).contains(digit) {
+                controller.setRating(digit)
+                return true
+            }
+            switch characters {
+            case "p", "з": controller.setFlag(.picked); return true
+            case "x", "ч": controller.setFlag(.rejected); return true
+            case "u", "г": controller.setFlag(nil); return true
+            default: break
+            }
+        }
+
         // `F` toggles fullscreen; `Ctrl+F` is handled by the menu equivalent.
         if !control, event.charactersIgnoringModifiers?.lowercased() == "f" {
             window?.toggleFullScreen(nil)

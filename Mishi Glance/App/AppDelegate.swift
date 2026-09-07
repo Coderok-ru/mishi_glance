@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var settingsWindow: NSWindow?
     private var aboutWindow: NSWindow?
     private var updateWindow: NSWindow?
+    private var exportWindow: NSWindow?
+    private let exportController = ExportController()
     private var openWithMenu: NSMenu?
 
     // MARK: - Lifecycle
@@ -36,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             openFiles([URL(fileURLWithPath: path)])
         }
         observeUpdatePresentation()
-        UpdateController.shared.checkOnLaunchIfDue()
+        UpdateController.shared.checkOnLaunch()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -142,6 +144,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc func revealInFinder(_ sender: Any?) { activeViewer?.revealInFinder() }
+
+    @objc func exportImages(_ sender: Any?) {
+        exportController.viewer = activeViewer
+        if let exportWindow {
+            exportWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(contentViewController:
+            NSHostingController(rootView: ExportView(controller: exportController)))
+        window.title = "Экспорт"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        exportWindow = window
+    }
+
+    @objc func toggleCompare(_ sender: Any?) { activeViewer?.toggleCompareWithNext() }
+    @objc func markPicked(_ sender: Any?) { activeViewer?.setFlag(.picked) }
+    @objc func markRejected(_ sender: Any?) { activeViewer?.setFlag(.rejected) }
+    @objc func clearMark(_ sender: Any?) { activeViewer?.setFlag(nil) }
+
+    @objc private func applyRating(_ sender: NSMenuItem) {
+        activeViewer?.setRating(sender.tag)
+    }
+
+    @objc func movePickedFiles(_ sender: Any?) {
+        guard let viewer = activeViewer else { return }
+        let count = viewer.count(of: .picked)
+        guard count > 0 else { return report("Ничего не отобрано", "Пометьте снимки клавишей P.") }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Переместить сюда"
+        panel.message = "Куда перенести отобранные снимки (\(count))"
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+
+        let outcome = viewer.movePicked(to: directory)
+        report("Перемещено: \(outcome.moved)",
+               outcome.failed > 0 ? "Не удалось перенести: \(outcome.failed)" : "")
+    }
+
+    @objc func trashRejectedFiles(_ sender: Any?) {
+        guard let viewer = activeViewer else { return }
+        let count = viewer.count(of: .rejected)
+        guard count > 0 else { return report("Ничего не отклонено", "Пометьте снимки клавишей X.") }
+
+        let alert = NSAlert()
+        alert.messageText = "Переместить отклонённые в Корзину?"
+        alert.informativeText = "Будет перенесено файлов: \(count). Из Корзины их можно вернуть."
+        alert.addButton(withTitle: "Переместить")
+        alert.addButton(withTitle: "Отмена")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        report("Перемещено в Корзину: \(viewer.trashRejected())", "")
+    }
+
+    private func report(_ title: String, _ detail: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
     @objc func shareImage(_ sender: Any?) { activeViewer?.share() }
     @objc func openInEditor(_ sender: Any?) { activeViewer?.openInExternalEditor() }
     @objc func toggleBrowserWindow(_ sender: Any?) { activeViewer?.toggleBrowser() }
@@ -288,8 +357,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
              #selector(goFirstImage), #selector(goLastImage):
             return manyImages
         case #selector(revealInFinder), #selector(moveToTrash), #selector(copyImage),
-             #selector(shareImage), #selector(openInEditor), #selector(toggleBrowserWindow):
+             #selector(shareImage), #selector(openInEditor), #selector(toggleBrowserWindow),
+             #selector(exportImages), #selector(markPicked), #selector(markRejected),
+             #selector(clearMark), #selector(movePickedFiles), #selector(trashRejectedFiles):
             return hasFile
+        case #selector(applyRating(_:)):
+            menuItem.state = (menuItem.tag == (viewer?.rating ?? 0)) ? .on : .off
+            return hasFile
+        case #selector(toggleCompare):
+            menuItem.title = viewer?.isComparing == true
+                ? "Закончить сравнение" : "Сравнить со следующим"
+            return manyImages
         case #selector(zoomToFit), #selector(zoomToActualSize),
              #selector(zoomImageIn), #selector(zoomImageOut),
              #selector(rotateClockwise), #selector(rotateCounterClockwise),
@@ -359,6 +437,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let reveal = fileMenu.addItem(withTitle: "Показать в Finder",
                                       action: #selector(revealInFinder(_:)), keyEquivalent: "r")
         reveal.keyEquivalentModifierMask = [.command, .shift]
+        let export = fileMenu.addItem(withTitle: "Экспортировать…",
+                                      action: #selector(exportImages(_:)), keyEquivalent: "e")
+        export.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(withTitle: "Поделиться…", action: #selector(shareImage(_:)), keyEquivalent: "")
         let editor = fileMenu.addItem(withTitle: "Открыть в редакторе",
                                       action: #selector(openInEditor(_:)), keyEquivalent: "e")
@@ -405,6 +486,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         sortItem.submenu = sortMenu
 
         viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Сравнить со следующим",
+                         action: #selector(toggleCompare(_:)), keyEquivalent: "\\")
         viewMenu.addItem(withTitle: "Изображения в папке",
                          action: #selector(toggleBrowserWindow(_:)), keyEquivalent: "b")
         viewMenu.addItem(withTitle: "Информация", action: #selector(toggleInfoPanel(_:)), keyEquivalent: "i")
@@ -426,6 +509,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         addNavigationItem(to: goMenu, title: "Последнее изображение",
                           action: #selector(goLastImage(_:)), key: NSEndFunctionKey)
         addSubmenu(goMenu, titled: "Переход", to: mainMenu)
+
+        // Отбор
+        let cullMenu = NSMenu(title: "Отбор")
+        cullMenu.addItem(withTitle: "Отобрать  (P)", action: #selector(markPicked(_:)), keyEquivalent: "")
+        cullMenu.addItem(withTitle: "Отклонить  (X)", action: #selector(markRejected(_:)), keyEquivalent: "")
+        cullMenu.addItem(withTitle: "Снять пометку  (U)", action: #selector(clearMark(_:)), keyEquivalent: "")
+        cullMenu.addItem(.separator())
+        for stars in 0 ... 5 {
+            let title = stars == 0 ? "Без рейтинга  (0)"
+                                   : String(repeating: "★", count: stars) + "  (\(stars))"
+            let item = cullMenu.addItem(withTitle: title,
+                                        action: #selector(applyRating(_:)), keyEquivalent: "")
+            item.tag = stars
+        }
+        cullMenu.addItem(.separator())
+        cullMenu.addItem(withTitle: "Переместить отобранные…",
+                         action: #selector(movePickedFiles(_:)), keyEquivalent: "")
+        cullMenu.addItem(withTitle: "Отклонённые в Корзину…",
+                         action: #selector(trashRejectedFiles(_:)), keyEquivalent: "")
+        addSubmenu(cullMenu, titled: "Отбор", to: mainMenu)
 
         // Window
         let windowMenu = NSMenu(title: "Окно")

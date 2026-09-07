@@ -50,6 +50,19 @@ struct ImageEntry: Identifiable, Hashable, Sendable {
 }
 
 extension ImageEntry {
+    /// Live Photo с айфона — это пара файлов с одинаковым именем: снимок
+    /// и короткий ролик рядом. Возвращает ролик, если он есть.
+    var livePhotoVideoURL: URL? {
+        let stem = url.deletingPathExtension()
+        for ext in ["mov", "MOV", "mp4", "MP4"] {
+            let candidate = stem.appendingPathExtension(ext)
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
+        return nil
+    }
+}
+
+extension ImageEntry {
     /// Отбор по подстроке имени: без учёта регистра и диакритики,
     /// пустой запрос ничего не отсеивает.
     static func filter(_ entries: [ImageEntry], query: String) -> [ImageEntry] {

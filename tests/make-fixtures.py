@@ -33,6 +33,14 @@ def build(root):
     Image.new("RGB", (1600, 200), (200, 90, 90)).save(os.path.join(sortd, "wide.jpg"))
     Image.new("RGB", (200, 1600), (90, 200, 90)).save(os.path.join(sortd, "tall.jpg"))
     Image.new("RGB", (400, 400), (90, 90, 200)).save(os.path.join(sortd, "square.jpg"))
+    # Анимированный GIF: 6 кадров по 80 мс, чтобы проверить разбор задержек.
+    frames = [Image.new("RGB", (120, 90), (i * 40 % 256, 90, 200 - i * 20)) for i in range(6)]
+    frames[0].save(os.path.join(sortd, "anim.gif"), save_all=True,
+                   append_images=frames[1:], duration=80, loop=0)
+    # Однотонный кадр с известным средним — эталон для гистограммы.
+    Image.new("RGB", (200, 200), (64, 128, 192)).save(os.path.join(sortd, "flat.png"))
+    # С альфа-каналом и 16 битами на канал.
+    Image.new("RGBA", (80, 80), (10, 20, 30, 128)).save(os.path.join(sortd, "alpha.png"))
     return basic, sortd
 
 if __name__ == "__main__":

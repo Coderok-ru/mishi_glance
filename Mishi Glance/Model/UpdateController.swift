@@ -60,11 +60,10 @@ final class UpdateController {
         run(silent: false)
     }
 
-    /// Фоновая проверка при запуске, не чаще раза в сутки.
-    func checkOnLaunchIfDue() {
+    /// Тихая проверка при каждом запуске: окно поднимается, только если
+    /// нашлась новая версия. Ошибки сети молча игнорируются.
+    func checkOnLaunch() {
         guard AppSettings.automaticUpdateChecks else { return }
-        let last = AppSettings.lastUpdateCheck
-        guard Date().timeIntervalSince(last) > 24 * 60 * 60 else { return }
         run(silent: true)
     }
 

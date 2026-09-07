@@ -30,6 +30,7 @@ struct ViewerView: View {
                     if controller.showInfoPanel {
                         InfoPanelView(
                             metadata: controller.metadata,
+                            histogram: controller.histogram,
                             fileName: controller.folder.current?.name
                         )
                         .padding(16)
@@ -75,14 +76,20 @@ struct ViewerView: View {
     @ViewBuilder
     private var content: some View {
         if let displayed = controller.displayed {
-            ImageCanvas(
-                controller: controller,
-                image: displayed.image,
-                scale: controller.scale,
-                offset: controller.offset,
-                rotation: controller.rotation
-            )
-            .ignoresSafeArea()
+            if controller.isComparing {
+                HStack(spacing: 8) {
+                    canvas(for: displayed, secondary: false)
+                    if let other = controller.compareImage {
+                        canvas(for: other, secondary: true)
+                    } else {
+                        ProgressView().controlSize(.small).tint(.white)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .ignoresSafeArea()
+            } else {
+                canvas(for: displayed, secondary: false).ignoresSafeArea()
+            }
         } else if let failure = controller.failureMessage {
             placeholder(icon: "exclamationmark.triangle", title: failure)
         } else if controller.isDecoding || controller.folder.isScanning {
@@ -92,6 +99,20 @@ struct ViewerView: View {
         } else {
             placeholder(icon: "photo.on.rectangle.angled", title: "Перетащите изображение")
         }
+    }
+
+    private func canvas(for image: DecodedImage, secondary: Bool) -> some View {
+        ImageCanvas(
+            controller: controller,
+            image: image.image,
+            scale: controller.scale,
+            offset: controller.offset,
+            rotation: controller.rotation,
+            animation: secondary ? nil : controller.animation,
+            isPlaying: controller.isAnimationPlaying,
+            pixelSize: image.pixelSize,
+            isSecondary: secondary
+        )
     }
 
     private func placeholder(icon: String, title: String) -> some View {

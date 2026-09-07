@@ -19,6 +19,12 @@ final class ViewerController {
     private(set) var isDecoding = false
     private(set) var failureMessage: String?
     private(set) var metadata: ImageMetadata?
+    private(set) var histogram: ImageHistogram?
+    /// Кадры анимации, если файл многокадровый.
+    private(set) var animation: AnimatedImage?
+    /// Ролик Live Photo рядом со снимком.
+    private(set) var livePhotoVideo: URL?
+    var isAnimationPlaying = true
 
     /// Points per image pixel. 1.0 means 100 %.
     private(set) var scale: CGFloat = 1
@@ -26,6 +32,12 @@ final class ViewerController {
     /// Display-only rotation in degrees: 0, 90, 180 or 270.
     private(set) var rotation: Int = 0
     private(set) var isFitMode = true
+
+    private(set) var rating = 0
+    private(set) var flag: PickFlag?
+    /// Второй снимок для сравнения бок о бок.
+    private(set) var compareEntry: ImageEntry?
+    private(set) var compareImage: DecodedImage?
 
     var showInfoPanel = false
     var overlayVisible = true
@@ -102,14 +114,57 @@ final class ViewerController {
         }
         onCurrentChanged?()
 
+        rating = ImageMarks.rating(of: entry.url)
+        flag = ImageMarks.flag(of: entry.url)
         metadata = nil
+        histogram = nil
+        animation = nil
+        isAnimationPlaying = true
+        livePhotoVideo = entry.livePhotoVideoURL
+
         let url = entry.url
         Task.detached(priority: .utility) { [weak self] in
             let meta = ImageDecoder.metadata(url: url)
             await self?.applyMetadata(meta, for: url, generation: generation)
         }
 
+        if let decoded {
+            let frame = decoded.image
+            Task.detached(priority: .utility) { [weak self] in
+                let computed = ImageDecoder.histogram(of: frame)
+                await self?.applyHistogram(computed, for: url, generation: generation)
+            }
+        }
+
+        // Анимацию разворачиваем в кадры отдельно: для обычных снимков
+        // ImageDecoder сразу вернёт nil и работы не будет.
+        if ImageDecoder.frameCount(url: url) > 1 {
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let animated = ImageDecoder.decodeAnimation(url: url, maxPixelSize: target)
+                await self?.applyAnimation(animated, for: url, generation: generation)
+            }
+        }
+
         await loader.prefetch(urls: folder.neighbourURLs(radius: 2), maxPixel: target)
+    }
+
+    private func applyHistogram(_ computed: ImageHistogram?, for url: URL, generation: Int) {
+        guard generation == loadGeneration, folder.current?.url == url else { return }
+        histogram = computed
+    }
+
+    private func applyAnimation(_ animated: AnimatedImage?, for url: URL, generation: Int) {
+        guard generation == loadGeneration, folder.current?.url == url else { return }
+        animation = animated
+    }
+
+    var isAnimated: Bool { (animation?.frames.count ?? 0) > 1 }
+    var hasLivePhoto: Bool { livePhotoVideo != nil }
+
+    func toggleAnimationPlayback() {
+        guard isAnimated else { return }
+        isAnimationPlaying.toggle()
+        flashOverlay()
     }
 
     private func applyMetadata(_ meta: ImageMetadata?, for url: URL, generation: Int) {
@@ -125,12 +180,94 @@ final class ViewerController {
         return Int((max(size.width, size.height) * backing).rounded())
     }
 
+    // MARK: - Отбраковка
+
+    func setRating(_ value: Int) {
+        guard let entry = folder.current else { return }
+        let next = (value == rating) ? 0 : value      // повторное нажатие снимает
+        ImageMarks.setRating(next, at: entry.url)
+        rating = next
+        flashOverlay()
+    }
+
+    func setFlag(_ value: PickFlag?) {
+        guard let entry = folder.current else { return }
+        let next = (value == flag) ? nil : value
+        ImageMarks.setFlag(next, at: entry.url)
+        flag = next
+        flashOverlay()
+    }
+
+    /// Сколько файлов папки помечено выбранным флагом.
+    func count(of value: PickFlag) -> Int {
+        folder.entries.reduce(0) { $0 + (ImageMarks.flag(of: $1.url) == value ? 1 : 0) }
+    }
+
+    /// Раскладывает отобранные снимки в выбранную папку.
+    func movePicked(to directory: URL) -> (moved: Int, failed: Int) {
+        var moved = 0, failed = 0
+        for entry in folder.entries where ImageMarks.flag(of: entry.url) == .picked {
+            let target = directory.appendingPathComponent(entry.name)
+            do {
+                try FileManager.default.moveItem(at: entry.url, to: target)
+                moved += 1
+            } catch { failed += 1 }
+        }
+        return (moved, failed)
+    }
+
+    /// Отправляет отклонённые в Корзину — оттуда их ещё можно вернуть.
+    func trashRejected() -> Int {
+        var count = 0
+        for entry in folder.entries where ImageMarks.flag(of: entry.url) == .rejected {
+            if (try? FileManager.default.trashItem(at: entry.url, resultingItemURL: nil)) != nil {
+                count += 1
+            }
+        }
+        return count
+    }
+
+    // MARK: - Сравнение
+
+    var isComparing: Bool { compareEntry != nil }
+
+    /// Ставит рядом следующий снимок папки. Повторный вызов выключает режим.
+    func toggleCompareWithNext() {
+        guard compareEntry == nil else {
+            compareEntry = nil
+            compareImage = nil
+            flashOverlay()
+            return
+        }
+        guard folder.count > 1 else { return }
+        let next = (folder.currentIndex + 1) % folder.count
+        compare(with: folder.entries[next])
+    }
+
+    func compare(with entry: ImageEntry) {
+        compareEntry = entry
+        compareImage = nil
+        let target = decodeTargetPixels
+        Task { [weak self] in
+            let decoded = await ImageLoader.shared.image(for: entry.url, maxPixel: target)
+            guard let self, self.compareEntry?.url == entry.url else { return }
+            self.compareImage = decoded
+            self.applyFit()
+            self.flashOverlay()
+        }
+    }
+
     // MARK: - Navigation
 
-    func next() { if folder.goNext() { Task { await reloadCurrent() } } }
-    func previous() { if folder.goPrevious() { Task { await reloadCurrent() } } }
-    func first() { if folder.goFirst() { Task { await reloadCurrent() } } }
-    func last() { if folder.goLast() { Task { await reloadCurrent() } } }
+    func next() { if folder.goNext() { endCompare(); Task { await reloadCurrent() } } }
+    func previous() { if folder.goPrevious() { endCompare(); Task { await reloadCurrent() } } }
+    func first() { if folder.goFirst() { endCompare(); Task { await reloadCurrent() } } }
+    func last() { if folder.goLast() { endCompare(); Task { await reloadCurrent() } } }
+
+    private func endCompare() {
+        compareEntry = nil
+        compareImage = nil
+    }
 
     func setSortOrder(_ order: ImageSortOrder) {
         folder.sortOrder = order
@@ -165,7 +302,10 @@ final class ViewerController {
         guard image.width > 0, image.height > 0, viewportSize.width > 0, viewportSize.height > 0 else {
             return 1
         }
-        let raw = min(viewportSize.width / image.width, viewportSize.height / image.height)
+        let available = isComparing
+            ? CGSize(width: (viewportSize.width - 8) / 2, height: viewportSize.height)
+            : viewportSize
+        let raw = min(available.width / image.width, available.height / image.height)
         return AppSettings.allowUpscale ? raw : min(raw, 1)
     }
 
@@ -276,6 +416,17 @@ final class ViewerController {
             parts.append("\(Int(displayed.pixelSize.width))×\(Int(displayed.pixelSize.height))")
         }
         parts.append(ByteFormat.string(entry.fileSize))
+        if let animation, animation.frames.count > 1 {
+            parts.append("\(animation.frames.count) кадров")
+        }
+        if hasLivePhoto { parts.append("Live Photo") }
+        if rating > 0 { parts.append(String(repeating: "★", count: rating)) }
+        switch flag {
+        case .picked: parts.append("отобрано")
+        case .rejected: parts.append("отклонено")
+        case nil: break
+        }
+        if let compareEntry { parts.append("сравнение с \(compareEntry.name)") }
         if !isFitMode {
             parts.append("\(zoomPercent) %")
         }

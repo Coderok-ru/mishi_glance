@@ -132,8 +132,13 @@ check("«Дата добавления» работает", added.count == order
 sortModel.sortOrder = .kind
 let kinds = Set(sortModel.entries.map(\.kind))
 check("«Вид» читается из системы", !kinds.contains(""), kinds.sorted().joined(separator: ", "))
-check("«Вид» группирует форматы", sortModel.entries.first?.kind == sortModel.entries[1].kind,
-      "\(sortModel.entries.first?.kind ?? "") / \(sortModel.entries[1].kind)")
+// Настоящий признак группировки: каждый вид встречается одним сплошным
+// отрезком, а не вразбивку.
+let kindRuns = sortModel.entries.map(\.kind).reduce(into: [String]()) { acc, k in
+    if acc.last != k { acc.append(k) }
+}
+check("«Вид» группирует форматы без разрывов",
+      kindRuns.count == Set(kindRuns).count, kindRuns.joined(separator: " → "))
 sortModel.sortOrder = .name
 check("возврат к имени восстанавливает порядок", sortModel.entries.map(\.name) == order)
 
@@ -245,7 +250,8 @@ func titles(of menuTitle: String) -> [String] {
     return sub.items.filter { !$0.isSeparatorItem }.map(\.title)
 }
 let top = mainMenu?.items.map(\.title) ?? []
-check("разделы верхнего меню", top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Окно"],
+check("разделы верхнего меню",
+      top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Отбор", "Окно"],
       top.joined(separator: " · "))
 
 let appItems = titles(of: "Mishi Glance")
@@ -255,7 +261,10 @@ check("стоит выше «Настройки…»",
       (appItems.firstIndex(of: "Проверить обновления…") ?? 99)
         < (appItems.firstIndex(of: "Настройки…") ?? 0))
 
-for (menu, item) in [("Файл","Поделиться…"), ("Файл","Открыть в программе"),
+for (menu, item) in [("Файл","Экспортировать…"), ("Вид","Сравнить со следующим"),
+                     ("Отбор","Отобрать  (P)"), ("Отбор","Отклонить  (X)"),
+                     ("Отбор","Переместить отобранные…"), ("Отбор","Отклонённые в Корзину…"),
+                     ("Файл","Поделиться…"), ("Файл","Открыть в программе"),
                      ("Файл","Показать в Finder"), ("Вид","Изображения в папке"),
                      ("Вид","Информация"), ("Переход","Следующее изображение")] {
     check("«\(item)» в меню «\(menu)»", titles(of: menu).contains(item),
@@ -314,6 +323,145 @@ if let base = ImageDecoder.decode(url: sortDir.appendingPathComponent("square.jp
 try? FileManager.default.removeItem(at: gpsURL)
 check("без координат карта не показывается",
       ImageDecoder.metadata(url: sortDir.appendingPathComponent("square.jpg"))?.hasCoordinate == false)
+
+print("\n[P] Анимация")
+let gif = sortDir.appendingPathComponent("anim.gif")
+check("кадров в файле: 6", ImageDecoder.frameCount(url: gif) == 6,
+      "\(ImageDecoder.frameCount(url: gif))")
+if let anim = ImageDecoder.decodeAnimation(url: gif, maxPixelSize: 400) {
+    check("развёрнуто 6 кадров", anim.frames.count == 6, "\(anim.frames.count)")
+    check("задержек столько же", anim.delays.count == anim.frames.count)
+    check("задержка около 80 мс", abs((anim.delays.first ?? 0) - 0.08) < 0.02,
+          "\(anim.delays.first ?? 0)")
+    check("длительность около 0,48 с", abs(anim.duration - 0.48) < 0.1,
+          String(format: "%.2f", anim.duration))
+    check("зациклен бесконечно", anim.loopCount == 0, "\(anim.loopCount)")
+} else {
+    check("анимация разобрана", false)
+}
+check("обычный снимок не считается анимацией",
+      ImageDecoder.decodeAnimation(url: sortDir.appendingPathComponent("square.jpg"),
+                                   maxPixelSize: 400) == nil)
+check("одиночный кадр не даёт анимации", ImageDecoder.frameCount(url: sortDir.appendingPathComponent("wide.jpg")) == 1)
+
+print("\n[Q] Гистограмма и подробные метаданные")
+let flat = sortDir.appendingPathComponent("flat.png")
+if let img = ImageDecoder.decode(url: flat, maxPixelSize: nil),
+   let h = ImageDecoder.histogram(of: img.image) {
+    check("средний красный = 64", abs(h.meanRed - 64) < 1.5, String(format: "%.1f", h.meanRed))
+    check("средний зелёный = 128", abs(h.meanGreen - 128) < 1.5, String(format: "%.1f", h.meanGreen))
+    check("средний синий = 192", abs(h.meanBlue - 192) < 1.5, String(format: "%.1f", h.meanBlue))
+    check("256 корзин на канал", h.red.count == 256 && h.luma.count == 256)
+    // Однотонная картинка: вся масса в одной корзине.
+    let filled = h.red.filter { $0 > 0 }.count
+    check("однотонный кадр — одна корзина", filled <= 2, "\(filled)")
+    check("пик положителен", h.peak > 0)
+    let sum = h.luma.reduce(0) { $0 + Int($1) }
+    check("сумма корзин = числу пикселей выборки", sum > 0, "\(sum)")
+} else {
+    check("гистограмма посчитана", false)
+}
+
+let alphaMeta = ImageDecoder.metadata(url: sortDir.appendingPathComponent("alpha.png"))
+check("альфа-канал распознан", alphaMeta?.hasAlpha == true)
+check("глубина цвета прочитана", (alphaMeta?.bitDepth ?? 0) > 0, "\(alphaMeta?.bitDepth ?? 0)")
+check("путь к папке заполнен", alphaMeta?.filePath.isEmpty == false)
+check("ориентация названа", alphaMeta?.orientationName != nil, alphaMeta?.orientationName ?? "nil")
+let jpegMeta = ImageDecoder.metadata(url: sortDir.appendingPathComponent("square.jpg"))
+check("у JPEG альфы нет", jpegMeta?.hasAlpha == false)
+
+print("\n[R] Экспорт и конвертация")
+let outDir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("mg-export-\(UUID().uuidString)")
+try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+let bigSource = dir.appendingPathComponent("img1.jpg")   // 4032×3024
+
+do {
+    let jpeg = try ImageExporter.export(source: bigSource, to: outDir,
+                                        options: ExportOptions(format: .jpeg, quality: 0.8))
+    check("JPEG создан", FileManager.default.fileExists(atPath: jpeg.path))
+    check("расширение .jpg", jpeg.pathExtension == "jpg", jpeg.lastPathComponent)
+    check("размеры сохранены", ImageDecoder.orientedPixelSize(url: jpeg)
+          == CGSize(width: 4032, height: 3024))
+
+    let png = try ImageExporter.export(source: bigSource, to: outDir,
+                                       options: ExportOptions(format: .png))
+    check("PNG создан", png.pathExtension == "png")
+
+    var shrink = ExportOptions(format: .jpeg, quality: 0.9)
+    shrink.maxPixelSize = 800
+    let small = try ImageExporter.export(source: bigSource, to: outDir, options: shrink)
+    let smallSize = ImageDecoder.orientedPixelSize(url: small)
+    check("уменьшение до 800 по длинной стороне",
+          Int(max(smallSize.width, smallSize.height)) == 800,
+          "\(Int(smallSize.width))×\(Int(smallSize.height))")
+
+    // Повторный экспорт не должен затирать уже созданный файл.
+    let again = try ImageExporter.export(source: bigSource, to: outDir,
+                                         options: ExportOptions(format: .jpeg))
+    check("второй файл получает свой номер", again.lastPathComponent != jpeg.lastPathComponent,
+          again.lastPathComponent)
+
+    // Перенос метаданных: берём снимок с координатами.
+    let gpsSrc = FileManager.default.temporaryDirectory.appendingPathComponent("mg-src-gps.jpg")
+    if let base = ImageDecoder.decode(url: sortDir.appendingPathComponent("square.jpg"), maxPixelSize: nil),
+       let d = CGImageDestinationCreateWithURL(gpsSrc as CFURL, UTType.jpeg.identifier as CFString, 1, nil) {
+        let gps: [CFString: Any] = [
+            kCGImagePropertyGPSLatitude: 55.7558, kCGImagePropertyGPSLatitudeRef: "N",
+            kCGImagePropertyGPSLongitude: 37.6173, kCGImagePropertyGPSLongitudeRef: "E"]
+        CGImageDestinationAddImage(d, base.image, [kCGImagePropertyGPSDictionary: gps] as CFDictionary)
+        CGImageDestinationFinalize(d)
+
+        let kept = try ImageExporter.export(source: gpsSrc, to: outDir,
+                                            options: ExportOptions(format: .jpeg, keepMetadata: true))
+        check("геометка перенесена", ImageDecoder.metadata(url: kept)?.hasCoordinate == true)
+
+        let stripped = try ImageExporter.export(source: gpsSrc, to: outDir,
+                                                options: ExportOptions(format: .jpeg, keepMetadata: false))
+        check("без метаданных геометки нет",
+              ImageDecoder.metadata(url: stripped)?.hasCoordinate == false)
+        try? FileManager.default.removeItem(at: gpsSrc)
+    }
+
+    let batch = ImageExporter.exportBatch(
+        sources: [bigSource, dir.appendingPathComponent("img2.jpg")],
+        to: outDir, options: ExportOptions(format: .png)) { _, _ in }
+    check("пакетно записано 2", batch.written.count == 2, "\(batch.written.count)")
+    check("ошибок нет", batch.failed.isEmpty, batch.failed.joined(separator: ", "))
+} catch {
+    check("экспорт без ошибок", false, error.localizedDescription)
+}
+try? FileManager.default.removeItem(at: outDir)
+
+print("\n[S] Пометки отбраковки")
+let markURL = sortDir.appendingPathComponent("square.jpg")
+ImageMarks.setRating(0, at: markURL)
+ImageMarks.setFlag(nil, at: markURL)
+check("изначально без рейтинга", ImageMarks.rating(of: markURL) == 0)
+check("изначально без флага", ImageMarks.flag(of: markURL) == nil)
+
+ImageMarks.setRating(4, at: markURL)
+check("рейтинг записан и прочитан", ImageMarks.rating(of: markURL) == 4,
+      "\(ImageMarks.rating(of: markURL))")
+ImageMarks.setRating(9, at: markURL)
+check("рейтинг ограничен пятёркой", ImageMarks.rating(of: markURL) == 5,
+      "\(ImageMarks.rating(of: markURL))")
+ImageMarks.setRating(0, at: markURL)
+check("нулевой рейтинг снимает атрибут", ImageMarks.rating(of: markURL) == 0)
+
+ImageMarks.setFlag(.picked, at: markURL)
+check("флаг «отобрано»", ImageMarks.flag(of: markURL) == .picked)
+ImageMarks.setFlag(.rejected, at: markURL)
+check("флаг меняется на «отклонено»", ImageMarks.flag(of: markURL) == .rejected)
+ImageMarks.setFlag(nil, at: markURL)
+check("флаг снимается", ImageMarks.flag(of: markURL) == nil)
+
+// Пометка не должна менять сам файл.
+let sizeBefore = (try? FileManager.default.attributesOfItem(atPath: markURL.path)[.size] as? Int) ?? 0
+ImageMarks.setRating(3, at: markURL)
+let sizeAfter = (try? FileManager.default.attributesOfItem(atPath: markURL.path)[.size] as? Int) ?? 0
+check("снимок не переписывается", sizeBefore == sizeAfter, "\(sizeBefore ?? 0) vs \(sizeAfter ?? 0)")
+ImageMarks.setRating(0, at: markURL)
 
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)

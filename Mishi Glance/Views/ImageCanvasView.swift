@@ -7,6 +7,7 @@
 //
 
 import AppKit
+import AVFoundation
 import SwiftUI
 
 final class ImageCanvasNSView: NSView, NSDraggingSource {
@@ -22,6 +23,14 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
     private var cursorHideTask: Task<Void, Never>?
     private var trackingArea: NSTrackingArea?
     private var checkerboardSize: CGSize = .zero
+    /// Размер показываемого кадра в пикселях. В режиме сравнения вторая
+    /// канва рисует другой снимок, поэтому размер приходит извне.
+    var pixelSizeOverride: CGSize?
+    /// Вторая канва не должна перехватывать жесты и менять viewport.
+    var isSecondary = false
+    private var animationKey: ObjectIdentifier?
+    private var livePlayer: AVPlayer?
+    private var liveLayer: AVPlayerLayer?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -43,7 +52,7 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
 
     override func layout() {
         super.layout()
-        controller?.viewportSize = bounds.size
+        if !isSecondary { controller?.viewportSize = bounds.size }
         applyTransform()
     }
 
@@ -61,6 +70,68 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         trackingArea = area
     }
 
+    /// Кадры проигрываются самим Core Animation: дискретная покадровая
+    /// анимация свойства contents дешевле таймера на главном потоке.
+    func setAnimation(_ animation: AnimatedImage?, playing: Bool) {
+        let key = animation.map { ObjectIdentifier($0.frames[0]) }
+        if key == animationKey, playing == (imageLayer.animation(forKey: "frames") != nil) {
+            return
+        }
+        animationKey = key
+        imageLayer.removeAnimation(forKey: "frames")
+
+        guard let animation, animation.frames.count > 1, playing else { return }
+
+        let total = max(animation.duration, 0.02)
+        var times: [NSNumber] = []
+        var elapsed = 0.0
+        for delay in animation.delays {
+            times.append(NSNumber(value: elapsed / total))
+            elapsed += delay
+        }
+
+        let keyframes = CAKeyframeAnimation(keyPath: "contents")
+        keyframes.values = animation.frames
+        keyframes.keyTimes = times
+        keyframes.duration = total
+        keyframes.calculationMode = .discrete
+        keyframes.repeatCount = animation.loopCount == 0
+            ? .greatestFiniteMagnitude : Float(animation.loopCount)
+        keyframes.isRemovedOnCompletion = false
+        keyframes.fillMode = .forwards
+        imageLayer.add(keyframes, forKey: "frames")
+    }
+
+    /// Проигрывает ролик Live Photo поверх снимка — один раз, как в Фото.
+    func playLivePhoto(_ url: URL?) {
+        stopLivePhoto()
+        guard let url else { return }
+
+        let player = AVPlayer(url: url)
+        let layer = AVPlayerLayer(player: player)
+        layer.videoGravity = .resizeAspect
+        layer.frame = imageLayer.frame
+        layer.transform = imageLayer.transform
+        self.layer?.addSublayer(layer)
+        livePlayer = player
+        liveLayer = layer
+
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopLivePhoto() }
+        }
+        player.play()
+    }
+
+    func stopLivePhoto() {
+        livePlayer?.pause()
+        liveLayer?.removeFromSuperlayer()
+        livePlayer = nil
+        liveLayer = nil
+    }
+
     func setImage(_ image: CGImage?) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -76,7 +147,9 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
     /// Layer bounds use the *unrotated* size; the rotation transform then
     /// produces the correct on-screen bounding box.
     func applyTransform() {
-        guard let controller, let displayed = controller.displayed else {
+        guard let controller else { return }
+        let unrotatedSize = pixelSizeOverride ?? controller.displayed?.pixelSize
+        guard let unrotated = unrotatedSize, unrotated.width > 0 else {
             imageLayer.isHidden = true
             backdropLayer.isHidden = true
             return
@@ -87,7 +160,6 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         imageLayer.magnificationFilter = smooth ? .linear : .nearest
         imageLayer.minificationFilter = smooth ? .trilinear : .nearest
 
-        let unrotated = displayed.pixelSize
         let scaled = CGSize(width: unrotated.width * controller.scale,
                             height: unrotated.height * controller.scale)
         let position = CGPoint(x: bounds.midX + controller.offset.width,
@@ -100,11 +172,16 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         imageLayer.bounds = CGRect(origin: .zero, size: scaled)
         imageLayer.position = position
         imageLayer.transform = transform
+        if let liveLayer {
+            liveLayer.bounds = imageLayer.bounds
+            liveLayer.position = position
+            liveLayer.transform = transform
+        }
 
         updateBackdrop(bounds: CGRect(origin: .zero, size: scaled),
                        position: position,
                        transform: transform,
-                       hasAlpha: displayed.hasAlpha)
+                       hasAlpha: controller.displayed?.hasAlpha ?? false)
         CATransaction.commit()
     }
 
@@ -210,6 +287,11 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         lastDragPoint = nil
         dragOrigin = nil
         guard !isDraggingFileOut else { return }
+        // Live Photo оживает по одиночному клику, как в «Фото».
+        if event.clickCount == 1, let controller, controller.hasLivePhoto {
+            playLivePhoto(controller.livePhotoVideo)
+            return
+        }
         if event.clickCount == 2, AppSettings.doubleClickActualSize {
             if controller?.isFitMode == true {
                 controller?.zoomToActualSize()
@@ -344,21 +426,30 @@ struct ImageCanvas: NSViewRepresentable {
     let scale: CGFloat
     let offset: CGSize
     let rotation: Int
+    let animation: AnimatedImage?
+    let isPlaying: Bool
+    var pixelSize: CGSize?
+    var isSecondary = false
 
     func makeNSView(context: Context) -> ImageCanvasNSView {
         let view = ImageCanvasNSView(frame: .zero)
         view.controller = controller
+        view.pixelSizeOverride = pixelSize
+        view.isSecondary = isSecondary
         view.setImage(image)
         return view
     }
 
     func updateNSView(_ view: ImageCanvasNSView, context: Context) {
         view.controller = controller
+        view.pixelSizeOverride = pixelSize
+        view.isSecondary = isSecondary
         if context.coordinator.lastImage !== image {
             context.coordinator.lastImage = image
             view.setImage(image)
         }
         view.applyTransform()
+        view.setAnimation(animation, playing: isPlaying)
         view.window?.invalidateCursorRects(for: view)
     }
 
