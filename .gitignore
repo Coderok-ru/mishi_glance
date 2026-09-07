@@ -1,0 +1,10 @@
+build/
+scripts/.venv/
+scripts/assets/svg2png
+scripts/assets/.logo-cache-*.png
+scripts/dmg-background.png
+scripts/dmg-background-1x.png
+scripts/dmg-background.tiff
+*.xcuserdatad/
+xcuserdata/
+.DS_Store

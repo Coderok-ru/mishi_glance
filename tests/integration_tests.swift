@@ -1,0 +1,176 @@
+import AppKit
+import SwiftUI
+
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+AppSettings.registerDefaults()
+
+var failures = 0
+func check(_ label: String, _ ok: Bool, _ detail: String = "") {
+    print((ok ? "  ok   " : "  FAIL ") + label + (detail.isEmpty ? "" : "  → \(detail)"))
+    if !ok { failures += 1 }
+}
+func pump(_ seconds: Double) {
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+}
+
+let dir = URL(fileURLWithPath: CommandLine.arguments[1])
+
+print("\n[A] Окно просмотра")
+let viewer = ViewerWindowController()
+viewer.open(url: dir.appendingPathComponent("img2.jpg"))
+pump(3)
+check("изображение декодировано", viewer.controller.displayed != nil)
+check("папка прочитана", viewer.controller.folder.count == 5, "\(viewer.controller.folder.count)")
+check("окно видимо", viewer.window?.isVisible == true)
+check("заголовок = имя файла", viewer.window?.title == "img2.jpg", viewer.window?.title ?? "nil")
+check("канва в иерархии", viewer.window?.contentView != nil)
+
+print("\n[B] Окно со списком изображений папки")
+check("изначально закрыто", !viewer.isBrowserVisible)
+viewer.toggleBrowser()
+pump(2)
+check("открывается по команде", viewer.isBrowserVisible)
+let browserWindow = NSApp.windows.first { $0.title == "Список файлов" }
+check("заголовок окна", browserWindow != nil, browserWindow?.title ?? "nil")
+let contentSize = browserWindow?.contentView?.frame.size ?? .zero
+check("вертикальное окно, не полоска", contentSize.width >= 440 && contentSize.height >= 700,
+      "\(Int(contentSize.width))×\(Int(contentSize.height))")
+check("выше, чем шире (как в референсе)", contentSize.height > contentSize.width)
+check("режим по умолчанию — список", AppSettings.browserViewMode == .list)
+viewer.toggleBrowser()
+pump(1)
+check("закрывается повторной командой", !viewer.isBrowserVisible)
+
+print("\n[C] Миниатюры для сетки")
+let thumb = await ImageLoader.thumbnails.image(for: dir.appendingPathComponent("img1.jpg"), maxPixel: 320)
+check("миниатюра построена", thumb != nil)
+check("ограничена 320 px", max(thumb?.image.width ?? 0, thumb?.image.height ?? 0) == 320,
+      "\(thumb?.image.width ?? -1)×\(thumb?.image.height ?? -1)")
+let mainStats = await ImageLoader.shared.statistics()
+let thumbStats = await ImageLoader.thumbnails.statistics()
+check("кеши раздельные", thumbStats.budget != mainStats.budget,
+      "основной \(mainStats.budget / 1048576) МБ, миниатюры \(thumbStats.budget / 1048576) МБ")
+check("бюджет основного = настройке", mainStats.budget == AppSettings.preloadBufferBytes)
+
+print("\n[D] Статистика и очистка буфера")
+check("в основном кеше есть кадры", mainStats.count > 0, "\(mainStats.count) шт, \(mainStats.bytes) байт")
+await ImageLoader.shared.clear()
+let cleared = await ImageLoader.shared.statistics()
+check("Очистить обнуляет", cleared.count == 0 && cleared.bytes == 0, "\(cleared.count)/\(cleared.bytes)")
+
+print("\n[E] Файловые ассоциации")
+check("типов в списке: 11", ImageFormat.all.count == 11, "\(ImageFormat.all.count)")
+let unresolved = ImageFormat.all.filter { $0.type == nil }.map(\.name)
+check("все UTI распознаны системой", unresolved.isEmpty, unresolved.joined(separator: ", "))
+let jpeg = ImageFormat.all.first { $0.name == "JPEG" }!
+let handler = FileAssociations.currentHandler(for: jpeg)
+check("текущий обработчик JPEG читается", handler != nil, handler?.name ?? "nil")
+// Preview owns JPEG on a stock system, so isSelf must be false here.
+check("чужой обработчик не считается своим", handler?.isSelf == false,
+      "isSelf=\(handler?.isSelf.description ?? "nil")")
+let missing = ImageFormat(name: "X", extensions: ".x", identifier: "invalid.type.zzz")
+check("неизвестный UTI не ломает чтение", FileAssociations.currentHandler(for: missing) == nil)
+
+print("\n[F] Настройки")
+let settings = NSHostingController(rootView: SettingsView())
+let settingsWindow = NSWindow(contentViewController: settings)
+settingsWindow.makeKeyAndOrderFront(nil)
+pump(2)
+check("окно настроек строится", settingsWindow.contentView != nil)
+check("размер вкладок задан", settings.view.fittingSize.width >= 520,
+      "\(Int(settings.view.fittingSize.width))×\(Int(settings.view.fittingSize.height))")
+
+print("\n[G] Прозрачность и режимы перетаскивания")
+check("режим по умолчанию — шахматка", AppSettings.transparencyMode == .checkerboard)
+check("перетаскивание по умолчанию — панорамирование", AppSettings.dragBehavior == .pan)
+check("сглаживание включено", AppSettings.smoothScaling)
+let alphaImage = ImageDecoder.decode(url: dir.appendingPathComponent("photo.png"), maxPixelSize: nil)
+check("PNG декодирован", alphaImage != nil)
+check("внешний редактор определён", AppSettings.externalEditorURL != nil,
+      AppSettings.externalEditorURL?.lastPathComponent ?? "nil")
+
+print("\n[H] Порядок листания против колонки Finder «Имя»")
+let sortDir = URL(fileURLWithPath: CommandLine.arguments[2])
+let sortModel = FolderModel()
+sortModel.sortOrder = .name
+sortModel.sortAscending = true
+await sortModel.open(url: sortDir.appendingPathComponent("1.jpg"))
+let order = sortModel.entries.map(\.name)
+print("   порядок: " + order.joined(separator: " · "))
+
+func before(_ a: String, _ b: String) -> Bool {
+    guard let i = order.firstIndex(of: a), let j = order.firstIndex(of: b) else { return false }
+    return i < j
+}
+check("числа natural: 2 < 10", before("2.jpg", "10.jpg"))
+check("числа natural: 1 < 2", before("1.jpg", "2.jpg"))
+check("регистр игнорируется: Foto 2 < foto 10", before("Foto 2.jpg", "foto 10.jpg"))
+check("ведущие нули: IMG_001 < img_2", before("IMG_001.jpg", "img_2.jpg"))
+// Collation follows the system locale, exactly as Finder's does: in ru_RU
+// Cyrillic precedes Latin, so this asserts we track the locale, not a guess.
+check("порядок алфавитов = системной локали (\(Locale.current.identifier))",
+      before("Апельсин.jpg", "zebra.png"),
+      "кириллица перед латиницей")
+check("совпадает с системным компаратором Finder",
+      order == order.sorted { $0.localizedStandardCompare($1) == .orderedAscending })
+check("кириллица по алфавиту: Апельсин < банан", before("Апельсин.jpg", "банан.jpg"))
+
+sortModel.sortAscending = false
+check("убывание — точный разворот", sortModel.entries.map(\.name) == order.reversed(),
+      sortModel.entries.map(\.name).prefix(3).joined(separator: " · "))
+
+sortModel.sortAscending = true
+sortModel.sortOrder = .dateAdded
+let added = sortModel.entries.map(\.name)
+check("«Дата добавления» работает", added.count == order.count && added != order,
+      added.prefix(3).joined(separator: " · "))
+sortModel.sortOrder = .kind
+let kinds = Set(sortModel.entries.map(\.kind))
+check("«Вид» читается из системы", !kinds.contains(""), kinds.sorted().joined(separator: ", "))
+check("«Вид» группирует форматы", sortModel.entries.first?.kind == sortModel.entries[1].kind,
+      "\(sortModel.entries.first?.kind ?? "") / \(sortModel.entries[1].kind)")
+sortModel.sortOrder = .name
+check("возврат к имени восстанавливает порядок", sortModel.entries.map(\.name) == order)
+
+print("\n[J] Строка списка не расползается от пропорций картинки")
+func rowSize(_ name: String) -> CGSize {
+    guard let entry = ImageEntry(url: sortDir.appendingPathComponent(name)) else { return .zero }
+    let host = NSHostingView(rootView: BrowserListRow(entry: entry, isCurrent: false))
+    host.frame = NSRect(x: 0, y: 0, width: 420, height: 300)
+    let w = NSWindow(contentRect: host.frame, styleMask: [.borderless],
+                     backing: .buffered, defer: false)
+    w.contentView = host
+    w.orderFront(nil)
+    pump(1.2)
+    let size = host.fittingSize
+    w.orderOut(nil)
+    return size
+}
+let expected = BrowserListRow.thumbnailSide + BrowserListRow.verticalPadding * 2
+let wide = rowSize("wide.jpg"), tall = rowSize("tall.jpg"), square = rowSize("square.jpg")
+print("   высоты: широкая \(Int(wide.height)) · высокая \(Int(tall.height)) · квадрат \(Int(square.height)), ожидается \(Int(expected))")
+check("широкая картинка (1600×200) не раздувает строку", abs(wide.height - expected) < 1,
+      "\(wide.height)")
+check("высокая картинка (200×1600) не раздувает строку", abs(tall.height - expected) < 1,
+      "\(tall.height)")
+check("квадратная — та же высота", abs(square.height - expected) < 1, "\(square.height)")
+check("все строки одной высоты", wide.height == tall.height && tall.height == square.height)
+check("широкая не растягивает строку вширь", wide.width <= 420 + 1, "\(wide.width)")
+
+print("\n[I] Окно «О программе»")
+let about = NSHostingController(rootView: AboutView())
+let aboutWindow = NSWindow(contentViewController: about)
+aboutWindow.makeKeyAndOrderFront(nil)
+pump(1.5)
+check("окно строится", aboutWindow.contentView != nil)
+check("ширина как задумано", Int(about.view.fittingSize.width) == 380,
+      "\(Int(about.view.fittingSize.width))×\(Int(about.view.fittingSize.height))")
+check("иконка приложения доступна", NSApp.applicationIconImage != nil)
+for link in ["https://t.me/coderok_official", "https://coderok.ru", "mailto:info@coderok.ru"] {
+    check("ссылка разбирается: \(link)", URL(string: link) != nil)
+}
+
+print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
+exit(failures == 0 ? 0 : 1)
