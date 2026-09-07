@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://coderok-ru.github.io/mishi_glance/sitemap.xml
