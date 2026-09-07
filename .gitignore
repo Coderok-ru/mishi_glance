@@ -8,3 +8,6 @@ scripts/dmg-background.tiff
 *.xcuserdatad/
 xcuserdata/
 .DS_Store
+
+# Техническое задание — внутренний документ
+TZ_*.md

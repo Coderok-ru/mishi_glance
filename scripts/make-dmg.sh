@@ -22,6 +22,8 @@ BUILD="$ROOT/build"
 APP="$BUILD/Mishi Glance.app"
 DMG="$BUILD/Mishi Glance.dmg"
 ARCHIVE="$BUILD/Mishi Glance.xcarchive"
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
 VOLUME="Mishi Glance"
 
 NOTARIZE=0
@@ -67,32 +69,32 @@ if [[ -n "${DEVID:-}" || -n "$ALLOW_UPDATES" ]]; then
     xcodebuild archive \
         -project "Mishi Glance.xcodeproj" -scheme "Mishi Glance" \
         -configuration Release -destination 'generic/platform=macOS' \
-        -archivePath "$ARCHIVE" $ALLOW_UPDATES \
+        -archivePath "$ARCHIVE" -derivedDataPath "$WORKDIR/dd" $ALLOW_UPDATES \
         | grep -E "error:|BUILD" || true
 
     echo "==> Экспортирую с Developer ID"
-    rm -rf "$BUILD/export"
+    rm -rf "$WORKDIR/export"
     xcodebuild -exportArchive \
         -archivePath "$ARCHIVE" \
         -exportOptionsPlist "$ROOT/scripts/ExportOptions.plist" \
-        -exportPath "$BUILD/export" $ALLOW_UPDATES \
+        -exportPath "$WORKDIR/export" $ALLOW_UPDATES \
         | grep -E "error:|EXPORT" || true
 
-    if [[ ! -d "$BUILD/export/Mishi Glance.app" ]]; then
+    if [[ ! -d "$WORKDIR/export/Mishi Glance.app" ]]; then
         echo "!! Экспорт не удался. Скорее всего нет сертификата Developer ID Application."
         echo "   Xcode → Signing & Capabilities → Signing Certificate → Developer ID Application,"
         echo "   либо запустите: ./scripts/make-dmg.sh --create-cert"
         exit 1
     fi
-    cp -R "$BUILD/export/Mishi Glance.app" "$BUILD/"
+    cp -R "$WORKDIR/export/Mishi Glance.app" "$BUILD/"
 else
     echo "==> Developer ID не найден — обычная сборка Release"
     echo "   Приложение запустится только на этой машине; Gatekeeper на чужом Mac его отклонит."
     xcodebuild -project "Mishi Glance.xcodeproj" -scheme "Mishi Glance" \
         -configuration Release -destination 'generic/platform=macOS' \
-        -derivedDataPath "$BUILD/DerivedData" build \
+        -derivedDataPath "$WORKDIR/dd" build \
         | grep -E "error:|BUILD" || true
-    cp -R "$BUILD/DerivedData/Build/Products/Release/Mishi Glance.app" "$BUILD/"
+    cp -R "$WORKDIR/dd/Build/Products/Release/Mishi Glance.app" "$BUILD/"
 fi
 
 # --- 2. Проверка подписи ---------------------------------------------------
@@ -201,6 +203,7 @@ fi
 
 # --- 6. Итог ---------------------------------------------------------------
 echo
+rm -rf "$ARCHIVE"
 echo "Готово: $DMG  ($(du -h "$DMG" | cut -f1))"
 echo -n "Вердикт Gatekeeper: "
 spctl --assess --type execute -v "$APP" 2>&1 | tail -1 | sed "s|^.*: ||"
