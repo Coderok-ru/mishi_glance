@@ -15,7 +15,7 @@
 [![Notarized](https://img.shields.io/badge/Apple-нотаризовано-success?logo=apple)]()
 [![License](https://img.shields.io/badge/лицензия-MIT-a656ff)](LICENSE)
 
-[**⬇︎ Скачать Mishi Glance 1.1.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg)
+[**⬇︎ Скачать Mishi Glance 1.2.0**](https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.2.0.dmg)
 
 </div>
 
@@ -58,7 +58,9 @@ Mishi Glance закрывает этот пробел. Открыли одно �
 <img src="docs/browser-grid.png" width="330" alt="Сетка">
 </div>
 
-Миниатюры держатся в собственном кеше, поэтому просмотр большой папки не вытесняет из памяти кадры, которые показывает просмотрщик.
+Поиск по имени фильтрует список на лету — в папке на тысячу файлов это заметно
+экономит время. Миниатюры держатся в собственном кеше, поэтому просмотр большой
+папки не вытесняет из памяти кадры, которые показывает просмотрщик.
 
 ### Масштаб и поворот
 
@@ -89,7 +91,9 @@ Mishi Glance закрывает этот пробел. Открыли одно �
 <img src="docs/viewer-info.png" width="820" alt="Панель информации">
 </div>
 
-Панель показывает размеры, вес, формат, цветовую модель, камеру, объектив, дату съёмки и параметры экспозиции.
+Панель показывает размеры, вес, формат, цветовую модель, камеру, объектив, дату съёмки
+и параметры экспозиции. Если камера записала координаты — рядом появляется карта места
+съёмки с кнопкой «Открыть в Картах».
 
 ---
 
@@ -101,7 +105,9 @@ Mishi Glance закрывает этот пробел. Открыли одно �
 <img src="docs/settings-filetypes.png" width="560" alt="Типы файлов">
 </div>
 
-**Поддерживаются:** JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF (первый кадр), TIFF, BMP, ICO, PSD — всё, что умеет декодировать сама macOS.
+**Поддерживаются:** JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF (первый кадр), TIFF, BMP, ICO, PSD,
+а также **RAW** — DNG, Canon CR2/CR3, Nikon NEF, Sony ARW, Fujifilm RAF, Olympus ORF,
+Panasonic RW2. Всего macOS декодирует 30 RAW-форматов, и все они открываются.
 
 ### Автообновление
 

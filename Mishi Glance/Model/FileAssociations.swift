@@ -31,6 +31,14 @@ struct ImageFormat: Identifiable, Sendable {
         ImageFormat(name: "BMP", extensions: ".bmp, .dib", identifier: "com.microsoft.bmp"),
         ImageFormat(name: "ICO", extensions: ".ico", identifier: "com.microsoft.ico"),
         ImageFormat(name: "PSD", extensions: ".psd", identifier: "com.adobe.photoshop-image"),
+        ImageFormat(name: "DNG", extensions: ".dng", identifier: "com.adobe.raw-image"),
+        ImageFormat(name: "CR2", extensions: ".cr2 · Canon", identifier: "com.canon.cr2-raw-image"),
+        ImageFormat(name: "CR3", extensions: ".cr3 · Canon", identifier: "com.canon.cr3-raw-image"),
+        ImageFormat(name: "NEF", extensions: ".nef · Nikon", identifier: "com.nikon.raw-image"),
+        ImageFormat(name: "ARW", extensions: ".arw · Sony", identifier: "com.sony.arw-raw-image"),
+        ImageFormat(name: "RAF", extensions: ".raf · Fujifilm", identifier: "com.fuji.raw-image"),
+        ImageFormat(name: "ORF", extensions: ".orf · Olympus", identifier: "com.olympus.raw-image"),
+        ImageFormat(name: "RW2", extensions: ".rw2 · Panasonic", identifier: "com.panasonic.rw2-raw-image"),
     ]
 }
 

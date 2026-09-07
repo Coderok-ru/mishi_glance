@@ -13,9 +13,14 @@ struct BrowserView: View {
     let controller: ViewerController
 
     @AppStorage(SettingsKey.browserViewMode) private var modeRaw = BrowserViewMode.list.rawValue
+    @State private var query = ""
 
     private var mode: BrowserViewMode {
         BrowserViewMode(rawValue: modeRaw) ?? .list
+    }
+
+    private var shown: [ImageEntry] {
+        ImageEntry.filter(controller.folder.entries, query: query)
     }
 
     private let gridColumns = [GridItem(.adaptive(minimum: 108, maximum: 168), spacing: 12)]
@@ -47,6 +52,12 @@ struct BrowserView: View {
                     systemImage: "photo.on.rectangle.angled",
                     description: Text("Откройте изображение, чтобы увидеть содержимое папки.")
                 )
+            } else if shown.isEmpty {
+                ContentUnavailableView(
+                    "Ничего не найдено",
+                    systemImage: "magnifyingglass",
+                    description: Text("В папке нет файлов с «\(query)» в имени.")
+                )
             }
         }
     }
@@ -59,8 +70,11 @@ struct BrowserView: View {
     // MARK: - Header
 
     private var header: some View {
+        VStack(spacing: 8) {
         HStack(spacing: 12) {
-            Text(imageCountText(controller.folder.count))
+            Text(query.isEmpty
+                 ? imageCountText(controller.folder.count)
+                 : "Найдено: \(shown.count) из \(controller.folder.count)")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
 
@@ -76,6 +90,29 @@ struct BrowserView: View {
             .labelsHidden()
             .frame(width: 84)
             .help("Списком или сеткой")
+        }
+
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            TextField("Поиск по имени", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Очистить")
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -102,7 +139,7 @@ struct BrowserView: View {
 
     private var listContent: some View {
         LazyVStack(spacing: 0) {
-            ForEach(controller.folder.entries) { entry in
+            ForEach(shown) { entry in
                 BrowserListRow(
                     entry: entry,
                     isCurrent: entry.url == controller.folder.current?.url
@@ -117,7 +154,7 @@ struct BrowserView: View {
 
     private var gridContent: some View {
         LazyVGrid(columns: gridColumns, spacing: 12) {
-            ForEach(controller.folder.entries) { entry in
+            ForEach(shown) { entry in
                 let isCurrent = entry.url == controller.folder.current?.url
                 VStack(spacing: 5) {
                     ThumbnailImage(url: entry.url, maxPixel: 320, cornerRadius: 7,

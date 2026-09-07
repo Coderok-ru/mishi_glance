@@ -1,5 +1,7 @@
 import AppKit
+import ImageIO
 import SwiftUI
+import UniformTypeIdentifiers
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
@@ -61,7 +63,8 @@ let cleared = await ImageLoader.shared.statistics()
 check("Очистить обнуляет", cleared.count == 0 && cleared.bytes == 0, "\(cleared.count)/\(cleared.bytes)")
 
 print("\n[E] Файловые ассоциации")
-check("типов в списке: 11", ImageFormat.all.count == 11, "\(ImageFormat.all.count)")
+check("типов в списке: 19 (11 обычных + 8 RAW)", ImageFormat.all.count == 19,
+      "\(ImageFormat.all.count)")
 let unresolved = ImageFormat.all.filter { $0.type == nil }.map(\.name)
 check("все UTI распознаны системой", unresolved.isEmpty, unresolved.joined(separator: ", "))
 let jpeg = ImageFormat.all.first { $0.name == "JPEG" }!
@@ -260,6 +263,57 @@ for (menu, item) in [("Файл","Поделиться…"), ("Файл","Отк
 }
 check("пункт обновления доступен", menuDelegate.validateMenuItem(
         NSMenuItem(title: "", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")))
+
+print("\n[O] RAW, поиск и геометка")
+let rawIDs = ["com.canon.cr2-raw-image","com.nikon.raw-image","com.sony.arw-raw-image","com.adobe.raw-image"]
+let rawOK = rawIDs.allSatisfy { UTType($0)?.conforms(to: .image) == true }
+check("система считает RAW изображениями", rawOK)
+let rawInList = ImageFormat.all.filter { rawIDs.contains($0.identifier) }.count
+check("RAW есть во вкладке форматов", rawInList == 4, "\(rawInList) из 4")
+check("форматов в списке стало 19", ImageFormat.all.count == 19, "\(ImageFormat.all.count)")
+
+let pool = sortModel.entries
+let byFoto = ImageEntry.filter(pool, query: "foto")
+check("поиск без учёта регистра", byFoto.count == 2, byFoto.map(\.name).joined(separator: " · "))
+check("пустой запрос не фильтрует", ImageEntry.filter(pool, query: "   ").count == pool.count)
+check("поиск по кириллице", ImageEntry.filter(pool, query: "апельсин").count == 1)
+check("несуществующее — пусто", ImageEntry.filter(pool, query: "zzzz").isEmpty)
+check("поиск по расширению", ImageEntry.filter(pool, query: ".png").count
+      == pool.filter { $0.name.hasSuffix(".png") }.count)
+
+// Записываем снимок с координатами и читаем их обратно.
+let gpsURL = FileManager.default.temporaryDirectory.appendingPathComponent("mg-gps.jpg")
+if let base = ImageDecoder.decode(url: sortDir.appendingPathComponent("square.jpg"), maxPixelSize: nil),
+   let dest = CGImageDestinationCreateWithURL(gpsURL as CFURL, UTType.jpeg.identifier as CFString, 1, nil) {
+    let gps: [CFString: Any] = [
+        kCGImagePropertyGPSLatitude: 59.9386, kCGImagePropertyGPSLatitudeRef: "N",
+        kCGImagePropertyGPSLongitude: 30.3141, kCGImagePropertyGPSLongitudeRef: "E",
+    ]
+    CGImageDestinationAddImage(dest, base.image, [kCGImagePropertyGPSDictionary: gps] as CFDictionary)
+    CGImageDestinationFinalize(dest)
+    let meta = ImageDecoder.metadata(url: gpsURL)
+    check("координаты прочитаны", meta?.hasCoordinate == true)
+    check("широта Петербурга", abs((meta?.latitude ?? 0) - 59.9386) < 0.001, "\(meta?.latitude ?? 0)")
+    check("долгота Петербурга", abs((meta?.longitude ?? 0) - 30.3141) < 0.001, "\(meta?.longitude ?? 0)")
+    // Западное полушарие должно уходить в минус.
+    let west = FileManager.default.temporaryDirectory.appendingPathComponent("mg-gps-w.jpg")
+    if let d2 = CGImageDestinationCreateWithURL(west as CFURL, UTType.jpeg.identifier as CFString, 1, nil) {
+        let g2: [CFString: Any] = [
+            kCGImagePropertyGPSLatitude: 40.7128, kCGImagePropertyGPSLatitudeRef: "N",
+            kCGImagePropertyGPSLongitude: 74.0060, kCGImagePropertyGPSLongitudeRef: "W",
+        ]
+        CGImageDestinationAddImage(d2, base.image, [kCGImagePropertyGPSDictionary: g2] as CFDictionary)
+        CGImageDestinationFinalize(d2)
+        let m2 = ImageDecoder.metadata(url: west)
+        check("западная долгота отрицательна", (m2?.longitude ?? 0) < 0, "\(m2?.longitude ?? 0)")
+    }
+    try? FileManager.default.removeItem(at: west)
+} else {
+    check("подготовка снимка с координатами", false)
+}
+try? FileManager.default.removeItem(at: gpsURL)
+check("без координат карта не показывается",
+      ImageDecoder.metadata(url: sortDir.appendingPathComponent("square.jpg"))?.hasCoordinate == false)
 
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)

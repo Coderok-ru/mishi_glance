@@ -46,6 +46,11 @@ struct ImageMetadata: Sendable {
     var aperture: String?
     var iso: String?
     var focalLength: String?
+    /// Координаты съёмки из EXIF, если камера их записала.
+    var latitude: Double?
+    var longitude: Double?
+
+    var hasCoordinate: Bool { latitude != nil && longitude != nil }
 }
 
 enum ImageDecoder {
@@ -145,6 +150,16 @@ enum ImageDecoder {
             if let focal = exif[kCGImagePropertyExifFocalLength] as? Double, focal > 0 {
                 meta.focalLength = String(format: "%.0f мм", focal)
             }
+        }
+
+        if let gps = props[kCGImagePropertyGPSDictionary] as? [CFString: Any],
+           let lat = gps[kCGImagePropertyGPSLatitude] as? Double,
+           let lon = gps[kCGImagePropertyGPSLongitude] as? Double {
+            // EXIF хранит модуль величины, полушарие — отдельной буквой.
+            let latRef = gps[kCGImagePropertyGPSLatitudeRef] as? String ?? "N"
+            let lonRef = gps[kCGImagePropertyGPSLongitudeRef] as? String ?? "E"
+            meta.latitude = latRef == "S" ? -lat : lat
+            meta.longitude = lonRef == "W" ? -lon : lon
         }
 
         return meta

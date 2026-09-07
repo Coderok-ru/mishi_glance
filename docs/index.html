@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>Mishi Glance — просмотрщик изображений для macOS</title>
-<meta name="description" content="Бесплатная программа для Mac: открыли одно фото — листайте всю папку стрелками. Масштаб, полный экран, назначение программой по умолчанию. macOS 15+, 3 МБ.">
+<meta name="description" content="Бесплатная программа для Mac: открыли одно фото — листайте всю папку стрелками. Поддержка RAW, поиск по имени, карта места съёмки. macOS 15+, 3 МБ.">
 <link rel="canonical" href="https://coderok-ru.github.io/mishi_glance/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="Андрей Любиченко, Coderok">
@@ -48,7 +48,7 @@
       "applicationCategory": "MultimediaApplication",
       "applicationSubCategory": "Просмотрщик изображений",
       "operatingSystem": "macOS 15.0 или новее",
-      "softwareVersion": "1.1.0",
+      "softwareVersion": "1.2.0",
       "fileSize": "3MB",
       "inLanguage": "ru",
       "url": "https://coderok-ru.github.io/mishi_glance/",
@@ -64,6 +64,9 @@
         "Список изображений папки списком или сеткой",
         "Назначение программой по умолчанию для форматов изображений",
         "Панель метаданных EXIF",
+        "Поиск по имени в списке файлов",
+        "Карта места съёмки по геометке EXIF",
+        "Поддержка RAW: DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2",
         "Автоматическое обновление"
       ],
       "offers": {
@@ -124,7 +127,7 @@
         {
           "@type": "Question",
           "name": "Какие форматы изображений поддерживаются?",
-          "acceptedAnswer": { "@type": "Answer", "text": "JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, TIFF, BMP, ICO и PSD — все форматы, которые умеет открывать сама macOS." }
+          "acceptedAnswer": { "@type": "Answer", "text": "JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, TIFF, BMP, ICO, PSD, а также RAW с фотокамер — DNG, Canon CR2 и CR3, Nikon NEF, Sony ARW, Fujifilm RAF, Olympus ORF, Panasonic RW2. Всего macOS декодирует 30 RAW-форматов." }
         },
         {
           "@type": "Question",
@@ -175,7 +178,12 @@
   .bar .mini{background:var(--accent);color:#fff;padding:8px 16px;border-radius:999px;
     font-size:14px;font-weight:600;transition:transform .18s,box-shadow .18s}
   .bar .mini:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(166,86,255,.35)}
-  @media(max-width:720px){.bar nav a:not(.mini){display:none}}
+  .bar .gh{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;
+    color:var(--body);border:1px solid var(--line);transition:all .2s;flex:none}
+  .bar .gh:hover{color:var(--heading);border-color:rgba(166,86,255,.5);
+    background:var(--accent-soft);transform:translateY(-1px)}
+  .bar .gh svg{width:19px;height:19px;display:block}
+  @media(max-width:720px){.bar nav a:not(.mini):not(.gh){display:none}}
 
   .hero{position:relative;text-align:center;padding:96px 0 0;overflow:hidden}
   .hero::before{content:"";position:absolute;top:-280px;left:50%;transform:translateX(-50%);
@@ -287,7 +295,11 @@
       <a href="#how">Как это работает</a>
       <a href="#features">Возможности</a>
       <a href="#faq">Вопросы</a>
-      <a class="mini" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg">Скачать</a>
+      <a class="mini" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.2.0.dmg">Скачать</a>
+      <a class="gh" href="https://github.com/Coderok-ru/mishi_glance"
+         aria-label="Исходный код на GitHub" title="Исходный код на GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
     </nav>
   </div>
 </header>
@@ -307,7 +319,7 @@
       Без возвращения в Finder, без лишних окон, без ожидания.
     </p>
     <div class="cta">
-      <a class="btn" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg">
+      <a class="btn" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.2.0.dmg">
         Скачать для Mac
       </a>
       <a class="btn ghost" href="#how">Посмотреть, как работает</a>
@@ -421,6 +433,21 @@
         <p>Размер, вес, камера, объектив, выдержка и дата съёмки — в одной панели.</p>
       </article>
       <article class="tile reveal">
+        <div class="ico" aria-hidden="true">📷</div>
+        <h3>RAW с фотокамер</h3>
+        <p>DNG, Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic — открываются наравне с JPEG.</p>
+      </article>
+      <article class="tile reveal">
+        <div class="ico" aria-hidden="true">🔎</div>
+        <h3>Поиск по имени</h3>
+        <p>Начните печатать — список папки отфильтруется на лету.</p>
+      </article>
+      <article class="tile reveal">
+        <div class="ico" aria-hidden="true">📍</div>
+        <h3>Карта места съёмки</h3>
+        <p>Если камера записала координаты, панель покажет, где сделан снимок.</p>
+      </article>
+      <article class="tile reveal">
         <div class="ico" aria-hidden="true">🔄</div>
         <h3>Обновляется само</h3>
         <p>Новая версия приходит сама. Ничего скачивать и переустанавливать не нужно.</p>
@@ -463,8 +490,10 @@
       </details>
       <details>
         <summary>Какие форматы изображений поддерживаются?</summary>
-        <p class="answer">JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, TIFF, BMP, ICO и PSD —
-          все форматы, которые умеет открывать сама macOS.</p>
+        <p class="answer">JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, TIFF, BMP, ICO, PSD,
+          а также RAW с фотокамер — DNG, Canon CR2 и CR3, Nikon NEF, Sony ARW,
+          Fujifilm RAF, Olympus ORF, Panasonic RW2. Всего macOS декодирует
+          30 RAW-форматов.</p>
       </details>
       <details>
         <summary>Программа платная?</summary>
@@ -487,7 +516,7 @@
       Дальше всё понятно без инструкции.
     </p>
     <div class="cta">
-      <a class="btn" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.1.0.dmg">
+      <a class="btn" href="https://github.com/Coderok-ru/mishi_glance/releases/latest/download/Mishi.Glance.1.2.0.dmg">
         Скачать бесплатно
       </a>
     </div>

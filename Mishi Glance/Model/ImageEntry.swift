@@ -49,6 +49,18 @@ struct ImageEntry: Identifiable, Hashable, Sendable {
     }
 }
 
+extension ImageEntry {
+    /// Отбор по подстроке имени: без учёта регистра и диакритики,
+    /// пустой запрос ничего не отсеивает.
+    static func filter(_ entries: [ImageEntry], query: String) -> [ImageEntry] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return entries }
+        return entries.filter {
+            $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+    }
+}
+
 enum ByteFormat {
     nonisolated(unsafe) private static let formatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
