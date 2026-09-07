@@ -230,5 +230,36 @@ do {
     print("   сеть недоступна, пропускаю: \(error.localizedDescription.prefix(60))")
 }
 
+print("\n[N] Главное меню")
+let menuDelegate = AppDelegate()
+NSApp.delegate = menuDelegate
+menuDelegate.applicationWillFinishLaunching(Notification(name: .init("probe")))
+let mainMenu = NSApp.mainMenu
+check("меню построено", mainMenu != nil)
+
+func titles(of menuTitle: String) -> [String] {
+    guard let sub = mainMenu?.items.first(where: { $0.title == menuTitle })?.submenu else { return [] }
+    return sub.items.filter { !$0.isSeparatorItem }.map(\.title)
+}
+let top = mainMenu?.items.map(\.title) ?? []
+check("разделы верхнего меню", top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Окно"],
+      top.joined(separator: " · "))
+
+let appItems = titles(of: "Mishi Glance")
+check("«Проверить обновления…» в меню программы",
+      appItems.contains("Проверить обновления…"), appItems.joined(separator: " · "))
+check("стоит выше «Настройки…»",
+      (appItems.firstIndex(of: "Проверить обновления…") ?? 99)
+        < (appItems.firstIndex(of: "Настройки…") ?? 0))
+
+for (menu, item) in [("Файл","Поделиться…"), ("Файл","Открыть в программе"),
+                     ("Файл","Показать в Finder"), ("Вид","Изображения в папке"),
+                     ("Вид","Информация"), ("Переход","Следующее изображение")] {
+    check("«\(item)» в меню «\(menu)»", titles(of: menu).contains(item),
+          titles(of: menu).joined(separator: " · "))
+}
+check("пункт обновления доступен", menuDelegate.validateMenuItem(
+        NSMenuItem(title: "", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "")))
+
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)
