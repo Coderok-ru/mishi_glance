@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var viewerControllers: [ViewerWindowController] = []
     private var settingsWindow: NSWindow?
     private var aboutWindow: NSWindow?
+    private var updateWindow: NSWindow?
     private var openWithMenu: NSMenu?
 
     // MARK: - Lifecycle
@@ -34,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if let path = commandLineImagePath() {
             openFiles([URL(fileURLWithPath: path)])
         }
+        observeUpdatePresentation()
+        UpdateController.shared.checkOnLaunchIfDue()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -193,6 +196,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         activeViewer?.setSortAscending(ascending)
     }
 
+    // MARK: - Обновления
+
+    @objc func checkForUpdates(_ sender: Any?) {
+        UpdateController.shared.checkManually()
+    }
+
+    /// Окно обновления поднимается само, когда контроллер этого просит:
+    /// и по ручной проверке, и когда тихая фоновая нашла новую версию.
+    private func observeUpdatePresentation() {
+        withObservationTracking {
+            _ = UpdateController.shared.isPresenting
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.syncUpdateWindow()
+                self?.observeUpdatePresentation()
+            }
+        }
+    }
+
+    private func syncUpdateWindow() {
+        let controller = UpdateController.shared
+        guard controller.isPresenting else {
+            updateWindow?.close()
+            updateWindow = nil
+            return
+        }
+        if let updateWindow {
+            updateWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let hosting = NSHostingController(rootView: UpdateView(controller: controller))
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Обновление"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        updateWindow = window
+    }
+
     // MARK: - About
 
     @objc func showAbout(_ sender: Any?) {
@@ -250,6 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
              #selector(rotateClockwise), #selector(rotateCounterClockwise),
              #selector(toggleInfoPanel):
             return hasImage
+        case #selector(checkForUpdates(_:)):
+            return !UpdateController.shared.isBusy
         case #selector(setSortOrder(_:)):
             menuItem.state = (menuItem.representedObject as? String) == AppSettings.sortOrder.rawValue ? .on : .off
             return hasFile
@@ -274,6 +321,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "О программе Mishi Glance",
                         action: #selector(showAbout(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Проверить обновления…",
+                        action: #selector(checkForUpdates(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Настройки…", action: #selector(showSettings(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())

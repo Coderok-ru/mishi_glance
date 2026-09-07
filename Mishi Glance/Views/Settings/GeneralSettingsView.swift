@@ -19,6 +19,14 @@ struct GeneralSettingsView: View {
     @AppStorage(SettingsKey.swipeNavigation) private var swipeNavigation = true
     @AppStorage(SettingsKey.wrapAround) private var wrapAround = true
     @AppStorage(SettingsKey.confirmDelete) private var confirmDelete = true
+    @AppStorage(SettingsKey.automaticUpdateChecks) private var automaticUpdateChecks = true
+
+    private var lastCheckText: String {
+        let last = AppSettings.lastUpdateCheck
+        guard last > .distantPast else { return "Ещё не проверялось" }
+        return "Последняя проверка: "
+            + last.formatted(date: .abbreviated, time: .shortened)
+    }
 
     var body: some View {
         Form {
@@ -62,6 +70,26 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Спрашивать подтверждение при удалении", isOn: $confirmDelete)
+            }
+
+            Section("Обновления") {
+                Toggle("Проверять обновления автоматически", isOn: $automaticUpdateChecks)
+                Text("Раз в сутки при запуске приложение спрашивает GitHub о новых "
+                     + "версиях. Обновление проверяется по подписи разработчика "
+                     + "перед установкой.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Text(lastCheckText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Проверить сейчас") {
+                        UpdateController.shared.checkManually()
+                    }
+                    .disabled(UpdateController.shared.isBusy)
+                }
             }
         }
         .formStyle(.grouped)

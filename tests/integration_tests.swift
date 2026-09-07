@@ -172,5 +172,63 @@ for link in ["https://t.me/coderok_official", "https://coderok.ru", "mailto:info
     check("ссылка разбирается: \(link)", URL(string: link) != nil)
 }
 
+print("\n[K] Обновление с GitHub")
+check("1.0 < 1.0.1", AppVersion("1.0") < AppVersion("1.0.1"))
+check("1.0.1 < 1.1", AppVersion("1.0.1") < AppVersion("1.1"))
+check("1.9 < 1.10 (не лексикографически)", AppVersion("1.9") < AppVersion("1.10"))
+check("1.1 < 2.0", AppVersion("1.1") < AppVersion("2.0"))
+check("префикс v срезается", AppVersion("v1.2.3").description == "1.2.3",
+      AppVersion("v1.2.3").description)
+check("1.0 и 1.0.0 равны", !(AppVersion("1.0") < AppVersion("1.0.0"))
+      && !(AppVersion("1.0.0") < AppVersion("1.0")))
+check("текущая версия читается", UpdateChecker.currentVersion.parts.first != nil,
+      UpdateChecker.currentVersion.description)
+
+print("\n[L] Проверка подписи обновления")
+let ownDMG = URL(fileURLWithPath: CommandLine.arguments[3])
+if FileManager.default.fileExists(atPath: ownDMG.path) {
+    do {
+        try UpdateChecker.verifySignature(at: ownDMG, expectApplication: false)
+        check("свой образ принимается", true)
+    } catch {
+        check("свой образ принимается", false, error.localizedDescription)
+    }
+} else {
+    print("   образ не собран, пропускаю")
+}
+// Preview подписан Apple, а не нашей командой — обязан быть отвергнут.
+do {
+    try UpdateChecker.verifySignature(at: URL(fileURLWithPath: "/System/Applications/Preview.app"),
+                                      expectApplication: true)
+    check("чужая подпись отвергается", false, "принял Preview.app!")
+} catch {
+    check("чужая подпись отвергается", true, "\(error.localizedDescription.prefix(46))")
+}
+// Ничем не подписанный файл.
+let junk = FileManager.default.temporaryDirectory.appendingPathComponent("mg-unsigned.dmg")
+try? Data(repeating: 0, count: 2048).write(to: junk)
+do {
+    try UpdateChecker.verifySignature(at: junk, expectApplication: false)
+    check("неподписанный файл отвергается", false, "принял мусор!")
+} catch {
+    check("неподписанный файл отвергается", true)
+}
+try? FileManager.default.removeItem(at: junk)
+
+print("\n[M] Живой запрос к GitHub")
+do {
+    let release = try await UpdateChecker.latestNewerRelease()
+    check("запрос выполнен без ошибки", true,
+          release.map { "предложена \($0.version)" } ?? "обновлений нет — версия свежая")
+    if let release {
+        check("ссылка ведёт на GitHub по https",
+              release.downloadURL.scheme == "https"
+              && (release.downloadURL.host ?? "").contains("github"),
+              release.downloadURL.host ?? "nil")
+    }
+} catch {
+    print("   сеть недоступна, пропускаю: \(error.localizedDescription.prefix(60))")
+}
+
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)

@@ -139,6 +139,9 @@ enum SettingsKey {
     static let externalEditorPath = "externalEditorPath"
 
     static let lastSessionURLs = "lastSessionURLs"
+
+    static let automaticUpdateChecks = "automaticUpdateChecks"
+    static let lastUpdateCheck = "lastUpdateCheck"
 }
 
 enum AppSettings {
@@ -163,6 +166,7 @@ enum AppSettings {
             SettingsKey.browserViewMode: BrowserViewMode.list.rawValue,
             SettingsKey.transparencyMode: TransparencyMode.checkerboard.rawValue,
             SettingsKey.preloadBufferMB: 300,
+            SettingsKey.automaticUpdateChecks: true,
         ])
     }
 
@@ -220,6 +224,15 @@ enum AppSettings {
             return URL(fileURLWithPath: path)
         }
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview")
+    }
+
+    static var automaticUpdateChecks: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.automaticUpdateChecks)
+    }
+
+    static var lastUpdateCheck: Date {
+        get { UserDefaults.standard.object(forKey: SettingsKey.lastUpdateCheck) as? Date ?? .distantPast }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKey.lastUpdateCheck) }
     }
 
     static var lastSessionURLs: [URL] {

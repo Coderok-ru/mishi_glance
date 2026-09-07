@@ -35,4 +35,4 @@ done
 echo
 "$WORK/model" "$WORK/basic"
 echo
-"$WORK/integration" "$WORK/basic" "$WORK/sort"
+"$WORK/integration" "$WORK/basic" "$WORK/sort" "$ROOT/build/Mishi Glance.dmg"
