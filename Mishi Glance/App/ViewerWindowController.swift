@@ -185,6 +185,12 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
             break
         }
 
+        // «?» — шпаргалка, привычно для программ с горячими клавишами.
+        if event.charactersIgnoringModifiers == "?" {
+            AppDelegate.shared?.showShortcuts(nil)
+            return true
+        }
+
         // Цифры 0…5 — рейтинг, P и X — отбор. Все без модификаторов, чтобы
         // отбраковка шла одной рукой.
         if let characters = event.charactersIgnoringModifiers?.lowercased(), !control {

@@ -142,6 +142,7 @@ enum SettingsKey {
 
     static let automaticUpdateChecks = "automaticUpdateChecks"
     static let lastUpdateCheck = "lastUpdateCheck"
+    static let didShowWelcome = "didShowWelcome"
 }
 
 enum AppSettings {
@@ -233,6 +234,11 @@ enum AppSettings {
     static var lastUpdateCheck: Date {
         get { UserDefaults.standard.object(forKey: SettingsKey.lastUpdateCheck) as? Date ?? .distantPast }
         set { UserDefaults.standard.set(newValue, forKey: SettingsKey.lastUpdateCheck) }
+    }
+
+    static var didShowWelcome: Bool {
+        get { UserDefaults.standard.bool(forKey: SettingsKey.didShowWelcome) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKey.didShowWelcome) }
     }
 
     static var lastSessionURLs: [URL] {

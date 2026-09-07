@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var aboutWindow: NSWindow?
     private var updateWindow: NSWindow?
     private var exportWindow: NSWindow?
+    private var shortcutsWindow: NSWindow?
+    private var welcomeWindow: NSWindow?
     private let exportController = ExportController()
     private var openWithMenu: NSMenu?
 
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeUpdatePresentation()
         UpdateController.shared.checkOnLaunch()
+        if !AppSettings.didShowWelcome { showWelcome() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -307,6 +310,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         updateWindow = window
     }
 
+    // MARK: - Шпаргалка и первый запуск
+
+    @objc func showShortcuts(_ sender: Any?) {
+        if let shortcutsWindow {
+            shortcutsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(contentViewController:
+            NSHostingController(rootView: ShortcutsView()))
+        window.title = "Клавиши"
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        shortcutsWindow = window
+    }
+
+    /// Приветствие показывается ровно один раз — при самом первом запуске.
+    func showWelcome() {
+        if let welcomeWindow {
+            welcomeWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        let view = WelcomeView(
+            onFinish: { [weak self] in
+                AppSettings.didShowWelcome = true
+                self?.welcomeWindow?.close()
+                self?.welcomeWindow = nil
+            },
+            onShowShortcuts: { [weak self] in self?.showShortcuts(nil) }
+        )
+        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        window.title = "Mishi Glance"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        welcomeWindow = window
+        // Закрыли крестиком — тоже считаем, что познакомились.
+        AppSettings.didShowWelcome = true
+    }
+
+    @objc func showWelcomeAgain(_ sender: Any?) { showWelcome() }
+
     // MARK: - About
 
     @objc func showAbout(_ sender: Any?) {
@@ -529,6 +579,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         cullMenu.addItem(withTitle: "Отклонённые в Корзину…",
                          action: #selector(trashRejectedFiles(_:)), keyEquivalent: "")
         addSubmenu(cullMenu, titled: "Отбор", to: mainMenu)
+
+        // Справка
+        let helpMenu = NSMenu(title: "Справка")
+        let keys = helpMenu.addItem(withTitle: "Клавиши…",
+                                    action: #selector(showShortcuts(_:)), keyEquivalent: "/")
+        keys.keyEquivalentModifierMask = [.command]
+        helpMenu.addItem(withTitle: "Знакомство с программой…",
+                         action: #selector(showWelcomeAgain(_:)), keyEquivalent: "")
+        addSubmenu(helpMenu, titled: "Справка", to: mainMenu)
+        NSApp.helpMenu = helpMenu
 
         // Window
         let windowMenu = NSMenu(title: "Окно")

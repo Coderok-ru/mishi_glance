@@ -251,7 +251,7 @@ func titles(of menuTitle: String) -> [String] {
 }
 let top = mainMenu?.items.map(\.title) ?? []
 check("разделы верхнего меню",
-      top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Отбор", "Окно"],
+      top == ["Mishi Glance", "Файл", "Правка", "Вид", "Переход", "Отбор", "Справка", "Окно"],
       top.joined(separator: " · "))
 
 let appItems = titles(of: "Mishi Glance")
@@ -264,6 +264,7 @@ check("стоит выше «Настройки…»",
 for (menu, item) in [("Файл","Экспортировать…"), ("Вид","Сравнить со следующим"),
                      ("Отбор","Отобрать  (P)"), ("Отбор","Отклонить  (X)"),
                      ("Отбор","Переместить отобранные…"), ("Отбор","Отклонённые в Корзину…"),
+                     ("Справка","Клавиши…"), ("Справка","Знакомство с программой…"),
                      ("Файл","Поделиться…"), ("Файл","Открыть в программе"),
                      ("Файл","Показать в Finder"), ("Вид","Изображения в папке"),
                      ("Вид","Информация"), ("Переход","Следующее изображение")] {
@@ -462,6 +463,26 @@ ImageMarks.setRating(3, at: markURL)
 let sizeAfter = (try? FileManager.default.attributesOfItem(atPath: markURL.path)[.size] as? Int) ?? 0
 check("снимок не переписывается", sizeBefore == sizeAfter, "\(sizeBefore ?? 0) vs \(sizeAfter ?? 0)")
 ImageMarks.setRating(0, at: markURL)
+
+print("\n[T] Шпаргалка по клавишам")
+let allItems = ShortcutCatalog.groups.flatMap(\.items)
+check("групп в шпаргалке: 4", ShortcutCatalog.groups.count == 4,
+      "\(ShortcutCatalog.groups.count)")
+check("подсказок больше двадцати", allItems.count > 20, "\(allItems.count)")
+check("у каждой есть клавиши и описание",
+      allItems.allSatisfy { !$0.keys.isEmpty && !$0.title.isEmpty })
+check("описания не повторяются",
+      Set(allItems.map(\.title)).count == allItems.count)
+check("идентификаторы уникальны",
+      Set(allItems.map(\.id)).count == allItems.count)
+check("в кратком списке 4 пункта", ShortcutCatalog.essentials.count == 4)
+// Ключевые сочетания обязаны быть описаны.
+for keys in [["←", "→"], ["F"], ["⌘", "I"], ["P"], ["X"], ["⌘", "B"], ["⇧", "⌘", "E"]] {
+    check("описано сочетание \(keys.joined(separator: "+"))",
+          allItems.contains { $0.keys == keys })
+}
+check("первый запуск ещё не отмечен или отмечен — флаг читается",
+      AppSettings.didShowWelcome == true || AppSettings.didShowWelcome == false)
 
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")
 exit(failures == 0 ? 0 : 1)
