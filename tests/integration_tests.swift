@@ -63,7 +63,7 @@ let cleared = await ImageLoader.shared.statistics()
 check("Очистить обнуляет", cleared.count == 0 && cleared.bytes == 0, "\(cleared.count)/\(cleared.bytes)")
 
 print("\n[E] Файловые ассоциации")
-check("типов в списке: 19 (11 обычных + 8 RAW)", ImageFormat.all.count == 19,
+check("типов в списке: 20", ImageFormat.all.count == 20,
       "\(ImageFormat.all.count)")
 let unresolved = ImageFormat.all.filter { $0.type == nil }.map(\.name)
 check("все UTI распознаны системой", unresolved.isEmpty, unresolved.joined(separator: ", "))
@@ -284,7 +284,7 @@ let rawOK = rawIDs.allSatisfy { UTType($0)?.conforms(to: .image) == true }
 check("система считает RAW изображениями", rawOK)
 let rawInList = ImageFormat.all.filter { rawIDs.contains($0.identifier) }.count
 check("RAW есть во вкладке форматов", rawInList == 4, "\(rawInList) из 4")
-check("форматов в списке стало 19", ImageFormat.all.count == 19, "\(ImageFormat.all.count)")
+check("форматов в списке стало 20", ImageFormat.all.count == 20, "\(ImageFormat.all.count)")
 
 let pool = sortModel.entries
 let byFoto = ImageEntry.filter(pool, query: "foto")
@@ -662,6 +662,94 @@ if let services {
           && text.contains("convertToJPEGFromFinder"))
     check("пункт открытия назван", text.contains("Открыть в Mishi Glance"))
     check("пункт конвертации назван", text.contains("Конвертировать в JPEG"))
+}
+
+print("\n[Σ] Векторные файлы")
+let svgURL = sortDir.appendingPathComponent("vector.svg")
+check("система считает SVG изображением", UTType.svg.conforms(to: .image))
+check("SVG проходит фильтр папки", ImageEntry(url: svgURL) != nil)
+check("SVG есть во вкладке форматов",
+      ImageFormat.all.contains { $0.identifier == "public.svg-image" })
+check("распознан как вектор", ImageDecoder.isVector(url: svgURL))
+check("растровый файл вектором не считается",
+      !ImageDecoder.isVector(url: sortDir.appendingPathComponent("square.jpg")))
+check("кадр всего один", ImageDecoder.frameCount(url: svgURL) == 1)
+
+let natural = ImageDecoder.orientedPixelSize(url: svgURL)
+check("собственный размер прочитан", natural == CGSize(width: 400, height: 300),
+      "\(Int(natural.width))×\(Int(natural.height))")
+
+// Вектор обязан давать разный растр под разные запросы — в этом весь смысл.
+let small = ImageDecoder.decode(url: svgURL, maxPixelSize: 200)
+let large = ImageDecoder.decode(url: svgURL, maxPixelSize: 1600)
+check("малый растр", small?.image.width == 200, "\(small?.image.width ?? -1)")
+check("крупный растр", large?.image.width == 1600, "\(large?.image.width ?? -1)")
+check("растр крупнее исходных 400 точек", (large?.image.width ?? 0) > 400)
+check("пиксельный размер остаётся собственным",
+      large?.pixelSize == CGSize(width: 400, height: 300))
+check("предел растеризации соблюдён",
+      (ImageDecoder.decode(url: svgURL, maxPixelSize: 99_999)?.image.width ?? 0)
+        <= ImageDecoder.vectorRasterCap)
+
+let svgMeta = ImageDecoder.metadata(url: svgURL)
+check("метаданные вектора собраны", svgMeta != nil)
+check("размеры в метаданных", svgMeta?.pixelWidth == 400 && svgMeta?.pixelHeight == 300)
+check("формат назван", svgMeta?.formatDescription.isEmpty == false,
+      svgMeta?.formatDescription ?? "nil")
+check("гистограмма по вектору считается",
+      large.flatMap { ImageDecoder.histogram(of: $0.image) } != nil)
+
+print("\n[Ω] Сверка: каждое сочетание из меню описано в шпаргалке")
+/// Приводит пункт меню к тому же виду, в каком клавиши записаны в каталоге.
+func menuShortcut(_ item: NSMenuItem) -> String? {
+    let key = item.keyEquivalent
+    guard !key.isEmpty else { return nil }
+    var parts: [String] = []
+    let flags = item.keyEquivalentModifierMask
+    if flags.contains(.control) { parts.append("⌃") }
+    if flags.contains(.option) { parts.append("⌥") }
+    if flags.contains(.shift) { parts.append("⇧") }
+    if flags.contains(.command) { parts.append("⌘") }
+    let named: [Character: String] = [
+        "\u{F700}": "↑", "\u{F701}": "↓", "\u{F702}": "←", "\u{F703}": "→",
+        "\u{F729}": "Home", "\u{F72B}": "End", "\u{8}": "⌫", "/": "/",
+    ]
+    let scalar = key.first.flatMap { named[$0] } ?? key.uppercased()
+    parts.append(scalar)
+    return parts.joined()
+}
+
+var catalogKeys = Set<String>()
+for item in ShortcutCatalog.groups.flatMap(\.items) {
+    catalogKeys.insert(item.keys.joined())
+    if !item.alternate.isEmpty { catalogKeys.insert(item.alternate.joined()) }
+    // Пары вроде ← → или Home End записаны одной строкой, а меню отдаёт
+    // клавиши по одной — засчитываем и их по отдельности.
+    let hasModifier = item.keys.contains { "⌘⇧⌥⌃".contains($0) }
+    if !hasModifier { item.keys.forEach { catalogKeys.insert($0) } }
+}
+// Пункты, которые системе принадлежат или дублируют уже описанное.
+let exempt: Set<String> = ["⌘Q", "⌘H", "⌥⌘H", "⌘W", "⌘M", "⌘,", "⌘/",
+                           "⌘0", "⌘1", "⌘+", "⌘-", "⌘−"]
+var undocumented: [String] = []
+for top in mainMenu?.items ?? [] {
+    for item in top.submenu?.items ?? [] where !item.isSeparatorItem {
+        guard let code = menuShortcut(item) else { continue }
+        if exempt.contains(code) || catalogKeys.contains(code) { continue }
+        undocumented.append("\(code) — \(item.title)")
+    }
+}
+check("все сочетания меню есть в шпаргалке", undocumented.isEmpty,
+      undocumented.joined(separator: " · "))
+
+// И обратно: описанные в шпаргалке клавиши без модификаторов должны
+// обрабатываться окном просмотра.
+let plainKeys = ShortcutCatalog.groups.flatMap(\.items)
+    .filter { $0.keys.count == 1 && $0.keys[0].count == 1 }
+    .map { $0.keys[0] }
+check("одиночные клавиши описаны", !plainKeys.isEmpty, plainKeys.joined(separator: " "))
+for key in ["F", "P", "X", "U", "S"] {
+    check("клавиша \(key) в шпаргалке", plainKeys.contains(key))
 }
 
 print(failures == 0 ? "\n✅ Все проверки пройдены" : "\n❌ Провалено: \(failures)")

@@ -30,6 +30,7 @@ struct ImageFormat: Identifiable, Sendable {
         ImageFormat(name: "TIFF", extensions: ".tiff, .tif", identifier: "public.tiff"),
         ImageFormat(name: "BMP", extensions: ".bmp, .dib", identifier: "com.microsoft.bmp"),
         ImageFormat(name: "ICO", extensions: ".ico", identifier: "com.microsoft.ico"),
+        ImageFormat(name: "SVG", extensions: ".svg, .svgz", identifier: "public.svg-image"),
         ImageFormat(name: "PSD", extensions: ".psd", identifier: "com.adobe.photoshop-image"),
         ImageFormat(name: "DNG", extensions: ".dng", identifier: "com.adobe.raw-image"),
         ImageFormat(name: "CR2", extensions: ".cr2 · Canon", identifier: "com.canon.cr2-raw-image"),

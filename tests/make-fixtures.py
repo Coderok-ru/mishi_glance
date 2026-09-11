@@ -59,6 +59,16 @@ def build(root):
     other = Image.new("RGB", (600, 400), (20, 30, 40))
     ImageDraw.Draw(other).ellipse([50, 50, 550, 350], fill=(240, 240, 240))
     other.save(os.path.join(dup, "different.png"))
+    # Векторный файл: ImageIO его не читает, растрирует AppKit.
+    svg = """<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#212428"/>
+  <circle cx="200" cy="150" r="90" fill="#a656ff"/>
+  <rect x="60" y="40" width="80" height="80" fill="#ffffff"/>
+</svg>
+"""
+    with open(os.path.join(sortd, "vector.svg"), "w", encoding="utf-8") as f:
+        f.write(svg)
     return basic, sortd
 
 if __name__ == "__main__":

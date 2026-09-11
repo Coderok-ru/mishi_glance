@@ -11,8 +11,16 @@ import Foundation
 struct ShortcutItem: Identifiable, Sendable {
     let keys: [String]
     let title: String
+    /// То же действие другим сочетанием — обычно пункт меню рядом с
+    /// одиночной клавишей.
+    var alternate: [String] = []
 
     var id: String { keys.joined() + title }
+
+    /// Как показать в шпаргалке: «S или ⌥⌘S».
+    var alternateLabel: String? {
+        alternate.isEmpty ? nil : alternate.joined()
+    }
 }
 
 struct ShortcutGroup: Identifiable, Sendable {
@@ -41,9 +49,11 @@ enum ShortcutCatalog {
             ShortcutItem(keys: ["Пинч"], title: "Масштаб щипком, ⌘ + колесо мыши"),
             ShortcutItem(keys: ["⌘", "R"], title: "Повернуть вправо"),
             ShortcutItem(keys: ["⌘", "L"], title: "Повернуть влево"),
-            ShortcutItem(keys: ["F"], title: "Во весь экран, выход — Esc"),
+            ShortcutItem(keys: ["F"], title: "Во весь экран, выход — Esc",
+                         alternate: ["⌃", "⌘", "F"]),
             ShortcutItem(keys: ["⌘", "\\"], title: "Сравнить со следующим"),
-            ShortcutItem(keys: ["S"], title: "Слайдшоу, пауза — ещё раз"),
+            ShortcutItem(keys: ["S"], title: "Слайдшоу, пауза — ещё раз",
+                         alternate: ["⌥", "⌘", "S"]),
             ShortcutItem(keys: ["⌥", "⌘", "C"], title: "Пипетка: цвет под курсором"),
         ]),
         ShortcutGroup(title: "Отбор кадров", symbol: "checkmark.circle", items: [

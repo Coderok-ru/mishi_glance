@@ -6,6 +6,7 @@
 //  it can run off the main actor.
 //
 
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -105,7 +106,55 @@ enum ImageDecoder {
     /// Uses the thumbnail API in both cases: with `FromImageAlways` and a max
     /// dimension equal to the source it returns the full image, and unlike
     /// `CGImageSourceCreateImageAtIndex` it applies EXIF orientation for us.
+    /// Векторные форматы ImageIO не читает, их растрирует AppKit.
+    static func isVector(url: URL) -> Bool {
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .svg)
+    }
+
+    /// Предел растеризации вектора. Выше смысла мало, а память растёт квадратично.
+    static let vectorRasterCap = 4096
+
+    /// Растрирует SVG нужного размера. Рисуем в CGContext, а не через
+    /// lockFocus: так можно работать вне главного потока.
+    static func decodeVector(url: URL, maxPixelSize: Int?) -> DecodedImage? {
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        let natural = image.size
+        guard natural.width > 0, natural.height > 0 else { return nil }
+
+        let longest = max(natural.width, natural.height)
+        // Вектор всегда рисуем с запасом: при увеличении он останется чётким.
+        let requested = Double(min(maxPixelSize ?? vectorRasterCap, vectorRasterCap))
+        let scale = max(requested / longest, 1.0 / longest)
+        let width = max(Int((natural.width * scale).rounded()), 1)
+        let height = max(Int((natural.height * scale).rounded()), 1)
+
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        let graphics = NSGraphicsContext(cgContext: context, flipped: false)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphics
+        image.draw(in: NSRect(x: 0, y: 0, width: width, height: height),
+                   from: .zero, operation: .sourceOver, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let cgImage = context.makeImage() else { return nil }
+        // Собственный размер вектора считаем «пиксельным»: от него пляшет
+        // масштабирование и подпись с размерами.
+        return DecodedImage(image: cgImage,
+                            pixelSize: CGSize(width: natural.width.rounded(),
+                                              height: natural.height.rounded()),
+                            isFullResolution: Double(width) >= requested - 1)
+    }
+
     static func decode(url: URL, maxPixelSize: Int?) -> DecodedImage? {
+        if isVector(url: url) {
+            return decodeVector(url: url, maxPixelSize: maxPixelSize)
+        }
         let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
         guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions as CFDictionary),
               CGImageSourceGetCount(source) > 0
@@ -132,6 +181,7 @@ enum ImageDecoder {
 
     /// Сколько кадров в файле. Больше одного — значит анимация.
     static func frameCount(url: URL) -> Int {
+        if isVector(url: url) { return 1 }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return 0 }
         return CGImageSourceGetCount(source)
     }
@@ -219,11 +269,17 @@ enum ImageDecoder {
     }
 
     static func orientedPixelSize(url: URL) -> CGSize {
+        if isVector(url: url) {
+            guard let image = NSImage(contentsOf: url) else { return .zero }
+            return CGSize(width: image.size.width.rounded(),
+                          height: image.size.height.rounded())
+        }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return .zero }
         return orientedPixelSize(source: source)
     }
 
     static func metadata(url: URL) -> ImageMetadata? {
+        if isVector(url: url) { return vectorMetadata(url: url) }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               CGImageSourceGetCount(source) > 0
         else { return nil }
@@ -323,6 +379,23 @@ enum ImageDecoder {
             }
         }
 
+        return meta
+    }
+
+    /// У вектора нет EXIF — собираем то немногое, что есть.
+    private static func vectorMetadata(url: URL) -> ImageMetadata? {
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        var meta = ImageMetadata()
+        meta.pixelWidth = Int(image.size.width.rounded())
+        meta.pixelHeight = Int(image.size.height.rounded())
+        meta.filePath = url.deletingLastPathComponent().path
+        if let values = try? url.resourceValues(forKeys: [.fileSizeKey]) {
+            meta.fileSize = Int64(values.fileSize ?? 0)
+        }
+        meta.formatDescription = UTType.svg.localizedDescription ?? "SVG"
+        meta.hasAlpha = true
+        meta.orientationName = "Обычная"
+        meta.colorModel = "Вектор"
         return meta
     }
 

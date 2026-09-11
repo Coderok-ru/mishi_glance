@@ -161,6 +161,7 @@ enum SettingsKey {
     static let lastUpdateCheck = "lastUpdateCheck"
     static let didShowWelcome = "didShowWelcome"
     static let slideshowInterval = "slideshowInterval"
+    static let smoothSlideshow = "smoothSlideshow"
 }
 
 enum AppSettings {
@@ -187,6 +188,7 @@ enum AppSettings {
             SettingsKey.preloadBufferMB: 300,
             SettingsKey.automaticUpdateChecks: true,
             SettingsKey.slideshowInterval: 4.0,
+            SettingsKey.smoothSlideshow: true,
         ])
     }
 
@@ -259,6 +261,10 @@ enum AppSettings {
     static var slideshowInterval: Double {
         let value = UserDefaults.standard.double(forKey: SettingsKey.slideshowInterval)
         return value < 0.5 ? 4 : value
+    }
+
+    static var smoothSlideshow: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.smoothSlideshow)
     }
 
     static var didShowWelcome: Bool {

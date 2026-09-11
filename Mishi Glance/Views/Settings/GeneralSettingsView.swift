@@ -21,6 +21,7 @@ struct GeneralSettingsView: View {
     @AppStorage(SettingsKey.confirmDelete) private var confirmDelete = true
     @AppStorage(SettingsKey.automaticUpdateChecks) private var automaticUpdateChecks = true
     @AppStorage(SettingsKey.slideshowInterval) private var slideshowInterval = 4.0
+    @AppStorage(SettingsKey.smoothSlideshow) private var smoothSlideshow = true
 
     private var lastCheckText: String {
         let last = AppSettings.lastUpdateCheck
@@ -86,6 +87,10 @@ struct GeneralSettingsView: View {
                         }
                     Text("сек.")
                 }
+                Toggle("Плавная смена кадров", isOn: $smoothSlideshow)
+                Text("Уходящий снимок гаснет, пока проявляется следующий.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Обновления") {

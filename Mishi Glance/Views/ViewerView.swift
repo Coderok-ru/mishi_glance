@@ -121,7 +121,8 @@ struct ViewerView: View {
             isSecondary: secondary,
             overlayImage: blended ? controller.compareImage?.image : nil,
             overlayOpacity: controller.compareOpacity,
-            overlayIsDifference: controller.compareMode == .difference
+            overlayIsDifference: controller.compareMode == .difference,
+            crossfade: controller.isSlideshowRunning && AppSettings.smoothSlideshow
         )
     }
 

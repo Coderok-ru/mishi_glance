@@ -39,9 +39,16 @@ struct ShortcutsView: View {
                                     }
                                 }
                                 .frame(width: 92, alignment: .leading)
-                                Text(item.title)
-                                    .font(.system(size: 12))
-                                    .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.title)
+                                        .font(.system(size: 12))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    if let alternate = item.alternateLabel {
+                                        Text("или \(alternate)")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
                                 Spacer(minLength: 0)
                             }
                         }

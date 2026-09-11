@@ -25,6 +25,21 @@ struct ViewerToolbar: View {
             }
 
             group {
+                ToolbarButton(symbol: controller.isSlideshowRunning ? "pause.fill" : "play.fill",
+                              help: controller.isSlideshowRunning
+                                    ? "Остановить слайдшоу (S)" : "Слайдшоу (S)",
+                              isActive: controller.isSlideshowRunning) {
+                    controller.toggleSlideshow()
+                }
+                ToolbarButton(symbol: "eyedropper",
+                              help: "Пипетка: цвет под курсором (⌥⌘C)",
+                              isActive: controller.isSamplingColor) {
+                    controller.isSamplingColor.toggle()
+                    controller.flashOverlay()
+                }
+            }
+
+            group {
                 ToolbarButton(symbol: "rotate.left", help: "Повернуть влево (⌘L)") {
                     controller.rotate(clockwise: false)
                 }

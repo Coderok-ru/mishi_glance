@@ -27,6 +27,7 @@
 				<string>org.webmproject.webp</string>
 				<string>com.microsoft.ico</string>
 				<string>com.adobe.photoshop-image</string>
+				<string>public.svg-image</string>
 				<string>com.adobe.raw-image</string>
 				<string>com.canon.cr2-raw-image</string>
 				<string>com.canon.cr3-raw-image</string>

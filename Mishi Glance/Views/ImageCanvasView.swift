@@ -16,12 +16,16 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
     private let backdropLayer = CALayer()
     private let imageLayer = CALayer()
     private let overlayLayer = CALayer()
+    /// Уходящий кадр: держит прежнее изображение и прежнюю геометрию,
+    /// пока гаснет. Без него кадры разного размера прыгали бы при смене.
+    private let fadeLayer = CALayer()
     private var lastDragPoint: CGPoint?
     private var dragOrigin: CGPoint?
     private var isDraggingFileOut = false
     private var swipeAccumulator: CGFloat = 0
     private var swipeArmed = true
     private var cursorHideTask: Task<Void, Never>?
+    private var crossfadeTask: Task<Void, Never>?
     private var trackingArea: NSTrackingArea?
     private var checkerboardSize: CGSize = .zero
     /// Размер показываемого кадра в пикселях. В режиме сравнения вторая
@@ -37,7 +41,10 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.addSublayer(backdropLayer)
+        layer?.addSublayer(fadeLayer)
         layer?.addSublayer(imageLayer)
+        fadeLayer.contentsGravity = .resize
+        fadeLayer.isHidden = true
         layer?.addSublayer(overlayLayer)
         overlayLayer.contentsGravity = .resize
         overlayLayer.isHidden = true
@@ -150,15 +157,64 @@ final class ImageCanvasNSView: NSView, NSDraggingSource {
         applyTransform()
     }
 
-    func setImage(_ image: CGImage?) {
+    func setImage(_ image: CGImage?, crossfade: Bool = false) {
+        let previous = imageLayer.contents
+        let hadImage = previous != nil && !imageLayer.isHidden
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        if crossfade, hadImage {
+            // Снимок прежнего слоя целиком: содержимое и геометрия.
+            fadeLayer.contents = previous
+            fadeLayer.contentsScale = imageLayer.contentsScale
+            fadeLayer.bounds = imageLayer.bounds
+            fadeLayer.position = imageLayer.position
+            fadeLayer.transform = imageLayer.transform
+            fadeLayer.isHidden = false
+            fadeLayer.opacity = 1
+        }
         imageLayer.contents = image
         imageLayer.contentsScale = window?.backingScaleFactor ?? 2
         imageLayer.isHidden = (image == nil)
         CATransaction.commit()
+
         checkerboardSize = .zero
         applyTransform()
+
+        guard crossfade, hadImage else { return }
+        runCrossfade()
+    }
+
+    private func runCrossfade() {
+        let duration: CFTimeInterval = 0.45
+
+        let fadeOut = CABasicAnimation(keyPath: "opacity")
+        fadeOut.fromValue = 1.0
+        fadeOut.toValue = 0.0
+        fadeOut.duration = duration
+        fadeOut.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        fadeOut.isRemovedOnCompletion = false
+        fadeOut.fillMode = .forwards
+        fadeLayer.add(fadeOut, forKey: "fade")
+
+        let fadeIn = CABasicAnimation(keyPath: "opacity")
+        fadeIn.fromValue = 0.0
+        fadeIn.toValue = 1.0
+        fadeIn.duration = duration
+        fadeIn.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        imageLayer.add(fadeIn, forKey: "fade")
+
+        crossfadeTask?.cancel()
+        crossfadeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled, let self else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.fadeLayer.removeAllAnimations()
+            self.fadeLayer.contents = nil
+            self.fadeLayer.isHidden = true
+            CATransaction.commit()
+        }
     }
 
     /// Positions the layers from the controller's scale / offset / rotation.
@@ -480,6 +536,8 @@ struct ImageCanvas: NSViewRepresentable {
     var overlayImage: CGImage?
     var overlayOpacity: Double = 0.5
     var overlayIsDifference = false
+    /// Смена кадра идёт с затуханием — во время слайдшоу.
+    var crossfade = false
 
     func makeNSView(context: Context) -> ImageCanvasNSView {
         let view = ImageCanvasNSView(frame: .zero)
@@ -495,8 +553,9 @@ struct ImageCanvas: NSViewRepresentable {
         view.pixelSizeOverride = pixelSize
         view.isSecondary = isSecondary
         if context.coordinator.lastImage !== image {
+            let isFirst = context.coordinator.lastImage == nil
             context.coordinator.lastImage = image
-            view.setImage(image)
+            view.setImage(image, crossfade: crossfade && !isFirst)
         }
         view.applyTransform()
         view.setOverlay(overlayImage, opacity: overlayOpacity, difference: overlayIsDifference)
